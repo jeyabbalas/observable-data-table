@@ -95,12 +95,51 @@ export class DataTable {
   async initializeDirect() {
     this.log.debug('Initializing direct DuckDB connection...');
     
-    // Direct DuckDB initialization (no worker)
-    this.connector = wasmConnector();
-    await this.connector.getDuckDB();
-    this.coordinator.databaseConnector(this.connector);
-    
-    this.log.debug('Direct DuckDB connection established');
+    try {
+      // Import DuckDB-WASM for direct mode
+      const duckdb = await import('@duckdb/duckdb-wasm');
+      
+      // Try to use JSDelivr bundles first, fallback to manual bundles  
+      let bundles;
+      try {
+        bundles = duckdb.getJsDelivrBundles();
+      } catch (e) {
+        this.log.warn('JSDelivr bundles not available, using manual bundles');
+        bundles = {
+          mvp: {
+            mainModule: new URL('@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm', import.meta.url).toString(),
+            mainWorker: new URL('@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js', import.meta.url).toString(),
+          },
+          eh: {
+            mainModule: new URL('@duckdb/duckdb-wasm/dist/duckdb-eh.wasm', import.meta.url).toString(),
+            mainWorker: new URL('@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js', import.meta.url).toString(),
+          },
+        };
+      }
+      
+      // Select the best bundle for this browser
+      const bundle = await duckdb.selectBundle(bundles);
+      this.log.debug('Selected DuckDB bundle:', bundle.mainModule.includes('eh') ? 'eh' : 'mvp');
+      
+      // Create logger
+      const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
+      
+      // Initialize DuckDB directly (no worker in direct mode)
+      this.db = new duckdb.AsyncDuckDB(logger);
+      await this.db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      
+      // Create a connection
+      this.conn = await this.db.connect();
+      
+      // Setup Mosaic connector with the DuckDB instance
+      this.connector = wasmConnector({ duckdb: this.db });
+      this.coordinator.databaseConnector(this.connector);
+      
+      this.log.debug('Direct DuckDB connection established');
+    } catch (error) {
+      this.log.error('Failed to initialize direct DuckDB connection:', error);
+      throw new Error(`Direct DuckDB initialization failed: ${error.message}`);
+    }
   }
   
   async initializeWorker() {

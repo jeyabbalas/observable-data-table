@@ -55,13 +55,60 @@ export class DataLoader {
   }
   
   async loadCSV(data, options = {}) {
-    // TODO: Implement CSV loading with DuckDB
     const tableName = options.tableName || 'data';
-    console.log('CSV loading - Coming soon!');
-    return {
-      tableName,
-      schema: { name: { type: 'string' }, age: { type: 'number' } }
-    };
+    const delimiter = options.delimiter || ',';
+    
+    this.dataTable.log.info(`Loading CSV data into table: ${tableName}`);
+    
+    if (this.dataTable.options.useWorker) {
+      // Worker mode
+      const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+      const result = await this.dataTable.sendToWorker('load', {
+        format: 'csv',
+        data: text,
+        tableName,
+        options: { delimiter }
+      });
+      
+      return result;
+    } else {
+      // Direct mode
+      if (!this.dataTable.db || !this.dataTable.conn) {
+        throw new Error('DuckDB not properly initialized in direct mode');
+      }
+      
+      const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+      
+      // Register the CSV data as a file in DuckDB's virtual filesystem
+      const fileName = `${tableName}.csv`;
+      await this.dataTable.db.registerFileText(fileName, text);
+      
+      // Use DuckDB's read_csv_auto for automatic schema detection
+      const sql = `
+        CREATE OR REPLACE TABLE ${tableName} AS 
+        SELECT * FROM read_csv_auto('${fileName}', 
+          delim='${delimiter}',
+          header=true,
+          auto_detect=true,
+          sample_size=1000
+        )
+      `;
+      
+      await this.dataTable.conn.query(sql);
+      
+      // Get schema information
+      const schema = await this.getTableSchema(tableName);
+      const rowCount = await this.getRowCount(tableName);
+      
+      this.dataTable.log.info(`CSV loaded: ${rowCount} rows, ${Object.keys(schema).length} columns`);
+      
+      return {
+        tableName,
+        schema,
+        rowCount,
+        format: 'csv'
+      };
+    }
   }
   
   async loadTSV(data, options = {}) {
@@ -96,5 +143,38 @@ export class DataLoader {
     // TODO: Implement ArrayBuffer loading
     console.log('ArrayBuffer loading - Coming soon!');
     return { tableName: 'data', schema: {} };
+  }
+  
+  /**
+   * Helper function to get table schema in direct mode
+   */
+  async getTableSchema(tableName) {
+    if (!this.dataTable.conn) {
+      throw new Error('No DuckDB connection available');
+    }
+    
+    const result = await this.dataTable.conn.query(`DESCRIBE ${tableName}`);
+    const columns = result.toArray();
+    
+    return columns.reduce((schema, col) => {
+      schema[col.column_name] = {
+        type: col.column_type,
+        nullable: col.null === 'YES'
+      };
+      return schema;
+    }, {});
+  }
+  
+  /**
+   * Helper function to get row count in direct mode
+   */
+  async getRowCount(tableName) {
+    if (!this.dataTable.conn) {
+      throw new Error('No DuckDB connection available');
+    }
+    
+    const result = await this.dataTable.conn.query(`SELECT COUNT(*) as count FROM ${tableName}`);
+    const rows = result.toArray();
+    return rows[0].count;
   }
 }
