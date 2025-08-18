@@ -58,6 +58,9 @@ class DataTableApp {
         logLevel: 'info'
       });
       
+      // 🚀 Task 2: Setup debug panel event listener
+      this.setupDebugPanel();
+      
       await this.dataTable.initialize();
       
       this.hideLoading();
@@ -387,6 +390,88 @@ class DataTableApp {
         notification.parentNode.removeChild(notification);
       }
     }, 5000);
+  }
+  
+  // 🚀 Task 2: Debug Panel Methods
+  
+  setupDebugPanel() {
+    if (!this.dataTable) return;
+    
+    // Listen for progress events from DataTable
+    document.getElementById('tableContainer').addEventListener('datatable-progress', (event) => {
+      this.updateDebugPanel(event.detail);
+    });
+    
+    // Initial debug panel setup
+    this.updateDebugPanel({
+      progress: this.dataTable.progress,
+      performance: this.dataTable.performance
+    });
+  }
+  
+  updateDebugPanel(detail) {
+    const { progress, performance, operation } = detail;
+    
+    // Update task status
+    if (progress) {
+      const task2Badge = document.getElementById('task2Badge');
+      if (progress.task2Complete) {
+        task2Badge.textContent = '✅';
+        task2Badge.className = 'task-badge complete';
+      } else if (progress.task2InProgress) {
+        task2Badge.textContent = '🔄';
+        task2Badge.className = 'task-badge in-progress';
+      }
+    }
+    
+    // Update system info
+    if (performance) {
+      document.getElementById('debugMode').textContent = performance.mode || 'Not initialized';
+      
+      // Format DuckDB version
+      const version = performance.duckdbVersion || 'Unknown';
+      document.getElementById('debugVersion').textContent = version.length > 20 ? 
+        version.substring(0, 20) + '...' : version;
+      
+      document.getElementById('debugBundle').textContent = performance.bundleType || 'Unknown';
+      
+      // Calculate and display init time
+      if (performance.initStartTime && performance.initEndTime) {
+        const initTime = performance.initEndTime - performance.initStartTime;
+        document.getElementById('debugInitTime').textContent = `${initTime}ms`;
+      }
+      
+      // Update memory info
+      if (performance.memoryUsage) {
+        if (typeof performance.memoryUsage === 'object') {
+          document.getElementById('debugMemory').textContent = 
+            `${performance.memoryUsage.used}/${performance.memoryUsage.total}`;
+        } else {
+          document.getElementById('debugMemory').textContent = performance.memoryUsage;
+        }
+      }
+    }
+    
+    // Update last operation
+    if (operation || (progress && progress.currentOperation)) {
+      const lastOp = operation || progress.currentOperation;
+      document.getElementById('debugLastOp').textContent = lastOp.length > 25 ? 
+        lastOp.substring(0, 25) + '...' : lastOp;
+    }
+    
+    // Update data status if DataTable exists
+    if (this.dataTable) {
+      const tableName = this.dataTable.tableName?.value || 'None';
+      document.getElementById('debugTable').textContent = tableName;
+      
+      const schema = this.dataTable.schema?.value || {};
+      document.getElementById('debugColumns').textContent = Object.keys(schema).length;
+      
+      // Try to get row count from latest operation
+      if (detail.rowCount) {
+        document.getElementById('debugRows').textContent = detail.rowCount;
+      }
+    }
   }
 }
 

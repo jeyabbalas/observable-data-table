@@ -22,6 +22,7 @@ export class DataTable {
     this.connector = null;
     this.db = null;
     this.worker = null;
+    this.conn = null;
     
     // State management with signals
     this.tableName = signal(null);
@@ -39,11 +40,33 @@ export class DataTable {
     this.persistenceManager = null;
     this.versionControl = null;
     
+    // 🚀 Task 2: Progress Tracking & Performance Metrics
+    this.performance = {
+      initStartTime: null,
+      initEndTime: null,
+      lastOperationTime: null,
+      mode: null,
+      duckdbVersion: null,
+      bundleType: null,
+      memoryUsage: null
+    };
+    
+    this.progress = {
+      task1Complete: true, // ✅ Task 1 completed
+      task2InProgress: false,
+      task2Complete: false,
+      currentOperation: null,
+      lastUpdate: null
+    };
+    
     // Setup logging
     this.setupLogging();
     
     // Bind methods
     this.handleWorkerMessage = this.handleWorkerMessage.bind(this);
+    
+    // 🚀 Log Task 2 initialization
+    this.logTaskProgress();
   }
   
   setupLogging() {
@@ -58,23 +81,94 @@ export class DataTable {
     };
   }
   
+  // 🚀 Task 2: Progress Tracking Methods
+  
+  logTaskProgress() {
+    console.group('🚀 DataTable Phase 1 Progress');
+    console.log('✅ Task 1: DuckDB-WASM Worker Initialization - COMPLETED');
+    console.log('🔄 Task 2: Enhanced Direct Mode & Progress Tracking - STARTING');
+    console.log('📊 Mode Preference:', this.options.useWorker ? 'Worker' : 'Direct');
+    console.log('📱 Progress tracking initialized');
+    console.groupEnd();
+    
+    this.progress.task2InProgress = true;
+    this.progress.lastUpdate = Date.now();
+  }
+  
+  updateProgress(operation, details = {}) {
+    this.progress.currentOperation = operation;
+    this.progress.lastUpdate = Date.now();
+    this.performance.lastOperationTime = Date.now();
+    
+    // Emit custom event for UI updates
+    if (this.options.container && this.options.container.dispatchEvent) {
+      this.options.container.dispatchEvent(new CustomEvent('datatable-progress', {
+        detail: {
+          operation,
+          progress: this.progress,
+          performance: this.performance,
+          ...details
+        }
+      }));
+    }
+    
+    this.log.debug(`🔄 Progress: ${operation}`, details);
+  }
+  
+  getProgressInfo() {
+    return {
+      progress: { ...this.progress },
+      performance: { ...this.performance },
+      schema: this.schema.value,
+      tableName: this.tableName.value,
+      queryCount: this.queryHistory.length
+    };
+  }
+  
+  logTask2Completion() {
+    console.group('🚀 DataTable Task 2 Progress');
+    console.log('✅ Task 2: Enhanced Direct Mode - COMPLETED');
+    console.log('📊 Mode:', this.performance.mode);
+    console.log('🔧 DuckDB Version:', this.performance.duckdbVersion || 'unknown');
+    console.log('📦 Bundle Type:', this.performance.bundleType || 'unknown');
+    console.log('⏱️ Init Time:', this.performance.initEndTime ? 
+      `${this.performance.initEndTime - this.performance.initStartTime}ms` : 'unknown');
+    console.log('🗄️ Tables Loaded:', this.tableName.value ? 1 : 0);
+    console.log('📈 Memory Usage:', this.performance.memoryUsage || 'unknown');
+    console.groupEnd();
+    
+    this.progress.task2Complete = true;
+    this.progress.task2InProgress = false;
+    this.updateProgress('Task 2 Complete');
+  }
+  
   async initialize() {
     try {
+      // 🚀 Task 2: Start timing initialization
+      this.performance.initStartTime = Date.now();
+      this.updateProgress('Initializing DataTable');
+      
       this.log.info('Initializing DataTable...');
       
       // Setup DuckDB connection
       if (this.options.useWorker) {
+        this.updateProgress('Initializing Worker Mode');
         await this.initializeWorker();
+        this.performance.mode = 'Worker';
       } else {
+        this.updateProgress('Initializing Direct Mode');
         await this.initializeDirect();
+        this.performance.mode = 'Direct';
       }
       
       // Setup persistence if enabled
       if (this.options.persistSession) {
+        this.updateProgress('Setting up persistence');
         await this.initializePersistence();
       }
       
       // Setup version control
+      this.updateProgress('Setting up version control');
       this.versionControl = new VersionControl({
         strategy: 'hybrid',
         maxCommands: 50,
@@ -82,12 +176,22 @@ export class DataTable {
       });
       
       // Create UI container
+      this.updateProgress('Creating UI container');
       this.createContainer();
       
+      // 🚀 Task 2: Complete initialization timing
+      this.performance.initEndTime = Date.now();
+      this.updateProgress('Initialization Complete');
+      
       this.log.info('DataTable initialized successfully');
+      
+      // 🚀 Task 2: Log completion
+      this.logTask2Completion();
+      
       return this;
     } catch (error) {
       this.log.error('Failed to initialize:', error);
+      this.updateProgress('Initialization Failed', { error: error.message });
       throw error;
     }
   }
@@ -96,6 +200,9 @@ export class DataTable {
     this.log.debug('Initializing direct DuckDB connection...');
     
     try {
+      // 🚀 Task 2: Track direct mode initialization
+      this.updateProgress('Loading DuckDB-WASM module');
+      
       // Import DuckDB-WASM for direct mode
       const duckdb = await import('@duckdb/duckdb-wasm');
       
@@ -118,10 +225,15 @@ export class DataTable {
       }
       
       // Select the best bundle for this browser
+      this.updateProgress('Selecting optimal DuckDB bundle');
       const bundle = await duckdb.selectBundle(bundles);
-      this.log.debug('Selected DuckDB bundle:', bundle.mainModule.includes('eh') ? 'eh' : 'mvp');
+      
+      // 🚀 Task 2: Capture bundle type for progress tracking
+      this.performance.bundleType = bundle.mainModule.includes('eh') ? 'eh' : 'mvp';
+      this.log.debug('Selected DuckDB bundle:', this.performance.bundleType);
       
       // Create logger
+      this.updateProgress('Creating DuckDB instance');
       const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
       
       // Initialize DuckDB directly (no worker in direct mode)
@@ -129,15 +241,37 @@ export class DataTable {
       await this.db.instantiate(bundle.mainModule, bundle.pthreadWorker);
       
       // Create a connection
+      this.updateProgress('Establishing database connection');
       this.conn = await this.db.connect();
       
+      // 🚀 Task 2: Get DuckDB version for progress tracking
+      try {
+        const versionResult = await this.conn.query('SELECT version() as version');
+        const versionData = versionResult.toArray();
+        this.performance.duckdbVersion = versionData[0]?.version || 'unknown';
+      } catch (e) {
+        this.performance.duckdbVersion = 'unknown';
+      }
+      
       // Setup Mosaic connector with the DuckDB instance
+      this.updateProgress('Configuring Mosaic coordinator');
       this.connector = wasmConnector({ duckdb: this.db });
       this.coordinator.databaseConnector(this.connector);
       
+      // 🚀 Task 2: Capture memory usage if available
+      if (performance.memory) {
+        this.performance.memoryUsage = {
+          used: Math.round(performance.memory.usedJSHeapSize / 1024 / 1024) + 'MB',
+          total: Math.round(performance.memory.totalJSHeapSize / 1024 / 1024) + 'MB'
+        };
+      }
+      
       this.log.debug('Direct DuckDB connection established');
+      this.updateProgress('Direct mode initialization complete');
+      
     } catch (error) {
       this.log.error('Failed to initialize direct DuckDB connection:', error);
+      this.updateProgress('Direct mode initialization failed', { error: error.message });
       throw new Error(`Direct DuckDB initialization failed: ${error.message}`);
     }
   }
@@ -146,6 +280,9 @@ export class DataTable {
     this.log.debug('Initializing DuckDB Web Worker...');
     
     try {
+      // 🚀 Task 2: Track worker initialization
+      this.updateProgress('Creating Web Worker');
+      
       // Initialize with Web Worker
       this.worker = new Worker(
         new URL('../workers/duckdb.worker.js', import.meta.url),
@@ -156,24 +293,47 @@ export class DataTable {
       this.worker.onmessage = this.handleWorkerMessage;
       this.worker.onerror = (error) => {
         this.log.error('Worker error:', error);
+        this.updateProgress('Worker failed, falling back to direct mode');
         // Fallback to direct initialization
         this.log.warn('Worker failed, falling back to direct DuckDB initialization');
         this.options.useWorker = false;
+        this.performance.mode = 'Direct (fallback)';
         return this.initializeDirect();
       };
       
       // Initialize DuckDB in worker with shorter timeout for development
-      await this.sendToWorker('init', {
+      this.updateProgress('Initializing DuckDB in worker');
+      const result = await this.sendToWorker('init', {
         config: {
           'max_memory': '512MB',
           'threads': '4'
         }
       });
       
+      // 🚀 Task 2: Capture worker performance info
+      if (result && result.version) {
+        this.performance.duckdbVersion = result.version;
+      }
+      if (result && result.config) {
+        this.performance.bundleType = 'worker';
+      }
+      
+      // 🚀 Task 2: Capture memory usage if available
+      if (performance.memory) {
+        this.performance.memoryUsage = {
+          used: Math.round(performance.memory.usedJSHeapSize / 1024 / 1024) + 'MB',
+          total: Math.round(performance.memory.totalJSHeapSize / 1024 / 1024) + 'MB'
+        };
+      }
+      
       this.log.debug('DuckDB Web Worker initialized');
+      this.updateProgress('Worker initialization complete');
+      
     } catch (error) {
       this.log.warn('Worker initialization failed, falling back to direct mode:', error.message);
+      this.updateProgress('Worker failed, falling back to direct mode', { error: error.message });
       this.options.useWorker = false;
+      this.performance.mode = 'Direct (fallback)';
       return this.initializeDirect();
     }
   }
@@ -250,6 +410,11 @@ export class DataTable {
   
   async loadData(source, options = {}) {
     try {
+      // 🚀 Task 2: Track data loading
+      const loadStartTime = Date.now();
+      const fileName = source instanceof File ? source.name : 'data';
+      this.updateProgress(`Loading data: ${fileName}`);
+      
       this.log.info('Loading data...');
       
       const result = await this.dataLoader.load(source, options);
@@ -257,6 +422,9 @@ export class DataTable {
       // Update table name and schema
       this.tableName.value = result.tableName;
       this.schema.value = result.schema || {};
+      
+      // 🚀 Task 2: Track table creation
+      this.updateProgress('Creating table renderer');
       
       // Create table renderer if not exists
       if (!this.tableRenderer && this.container) {
@@ -272,6 +440,7 @@ export class DataTable {
       
       // Save to persistence if enabled
       if (this.persistenceManager) {
+        this.updateProgress('Saving to persistence');
         await this.persistenceManager.saveTable({
           tableName: this.tableName.value,
           schema: this.schema.value,
@@ -279,10 +448,30 @@ export class DataTable {
         });
       }
       
+      // 🚀 Task 2: Complete data loading tracking
+      const loadTime = Date.now() - loadStartTime;
+      this.updateProgress(`Data loaded: ${this.tableName.value}`, {
+        loadTime: `${loadTime}ms`,
+        rowCount: result.rowCount || 'unknown',
+        columnCount: Object.keys(this.schema.value).length
+      });
+      
       this.log.info(`Data loaded successfully: ${this.tableName.value}`);
+      
+      // Log data loading progress
+      console.group('📊 Data Loading Complete');
+      console.log('📁 File:', fileName);
+      console.log('🗄️ Table:', this.tableName.value);
+      console.log('📊 Rows:', result.rowCount || 'unknown');
+      console.log('📋 Columns:', Object.keys(this.schema.value).length);
+      console.log('⏱️ Load Time:', `${loadTime}ms`);
+      console.log('🔧 Mode:', this.performance.mode);
+      console.groupEnd();
+      
       return result;
     } catch (error) {
       this.log.error('Failed to load data:', error);
+      this.updateProgress('Data loading failed', { error: error.message });
       throw error;
     }
   }

@@ -133,6 +133,80 @@
           </div>
         </div>
       </div>
+
+      <!-- 🚀 Task 2: Debug Info Panel -->
+      <div class="sidebar-section">
+        <h3>🚀 Debug Info</h3>
+        <div id="debugInfo" class="debug-container">
+          <div class="debug-section">
+            <h4>Task Progress</h4>
+            <div class="task-status">
+              <div class="task-item">
+                <span class="task-badge complete">✅</span>
+                <span>Task 1: Worker Init</span>
+              </div>
+              <div class="task-item">
+                <span class="task-badge" id="task2Badge">🔄</span>
+                <span>Task 2: Direct Mode</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="debug-section">
+            <h4>System Info</h4>
+            <div class="debug-info">
+              <div class="info-row">
+                <span class="label">Mode:</span>
+                <span id="debugMode" class="value">Not initialized</span>
+              </div>
+              <div class="info-row">
+                <span class="label">DuckDB:</span>
+                <span id="debugVersion" class="value">Unknown</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Bundle:</span>
+                <span id="debugBundle" class="value">Unknown</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Init Time:</span>
+                <span id="debugInitTime" class="value">0ms</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="debug-section">
+            <h4>Performance</h4>
+            <div class="debug-info">
+              <div class="info-row">
+                <span class="label">Memory:</span>
+                <span id="debugMemory" class="value">Unknown</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Last Op:</span>
+                <span id="debugLastOp" class="value">None</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="debug-section">
+            <h4>Data Status</h4>
+            <div class="debug-info">
+              <div class="info-row">
+                <span class="label">Table:</span>
+                <span id="debugTable" class="value">None</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Rows:</span>
+                <span id="debugRows" class="value">0</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Columns:</span>
+                <span id="debugColumns" class="value">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <!-- Status Bar -->

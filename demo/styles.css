@@ -467,6 +467,115 @@ body {
   background: var(--warning-color);
 }
 
+/* 🚀 Task 2: Debug Info Panel Styles */
+.debug-container {
+  font-size: 0.85rem;
+}
+
+.debug-section {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.debug-section h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.task-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.task-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.task-badge.complete {
+  background: var(--success-color);
+  color: white;
+}
+
+.task-badge.in-progress {
+  background: var(--warning-color);
+  color: white;
+}
+
+.debug-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-size: 0.8rem;
+}
+
+.info-row .label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.info-row .value {
+  color: var(--text-primary);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  text-align: right;
+  word-break: break-all;
+}
+
+.info-row .value.error {
+  color: var(--error-color);
+}
+
+.info-row .value.success {
+  color: var(--success-color);
+}
+
+.info-row .value.warning {
+  color: var(--warning-color);
+}
+
+/* Dark mode adjustments for debug panel */
+[data-theme="dark"] .debug-section {
+  border-bottom-color: var(--border);
+}
+
+[data-theme="dark"] .task-badge.complete {
+  background: #10b981;
+}
+
+[data-theme="dark"] .task-badge.in-progress {
+  background: #f59e0b;
+}
+
 .notification.info {
   background: var(--primary-color);
 }
