@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DataTable.js Demo - Interactive Data Tables</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-content">
+        <h1>
+          <span class="logo">📊</span>
+          DataTable.js Demo
+        </h1>
+        <p class="subtitle">Interactive ObservableHQ-style data tables in the browser</p>
+      </div>
+    </header>
+
+    <!-- Controls Section -->
+    <section class="controls-section">
+      <div class="controls-container">
+        <div class="control-group">
+          <h3>Load Data</h3>
+          <div class="file-controls">
+            <label for="fileInput" class="file-input-label">
+              📁 Choose File
+              <input type="file" id="fileInput" accept=".csv,.tsv,.json,.parquet" style="display: none;">
+            </label>
+            <span id="fileName" class="file-name"></span>
+          </div>
+          
+          <div class="url-controls">
+            <input type="url" id="urlInput" placeholder="Or enter data URL (CSV, JSON, Parquet)" class="url-input">
+            <button id="loadUrl" class="btn btn-primary">Load from URL</button>
+          </div>
+          
+          <div class="sample-data">
+            <label>Sample Data:</label>
+            <button id="loadSample" class="btn btn-secondary">Load Sample Dataset</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <h3>Options</h3>
+          <div class="options">
+            <label class="checkbox-label">
+              <input type="checkbox" id="persistSession" checked>
+              <span class="checkmark"></span>
+              Persist session across browser refreshes
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="useWorker">
+              <span class="checkmark"></span>
+              Use Web Worker for processing (experimental)
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Data Table Container -->
+      <section class="table-section">
+        <div class="section-header">
+          <h2>Data Table</h2>
+          <div class="table-controls">
+            <button id="clearData" class="btn btn-outline" disabled>Clear Data</button>
+            <button id="exportData" class="btn btn-outline" disabled>Export Data</button>
+          </div>
+        </div>
+        <div id="tableContainer" class="table-container">
+          <div class="empty-state">
+            <div class="empty-icon">📊</div>
+            <h3>No Data Loaded</h3>
+            <p>Upload a file or load data from a URL to get started</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SQL Editor Section -->
+      <section class="sql-section">
+        <div class="section-header">
+          <h2>SQL Editor</h2>
+          <div class="sql-controls">
+            <button id="copySql" class="btn btn-outline" disabled>📋 Copy SQL</button>
+            <button id="executeSql" class="btn btn-primary" disabled>▶️ Execute</button>
+          </div>
+        </div>
+        <div id="sqlEditor" class="sql-editor-container">
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <h3>SQL Editor</h3>
+            <p>Load data to start writing SQL queries</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <!-- Query History -->
+      <div class="sidebar-section">
+        <h3>Query History</h3>
+        <div id="queryHistory" class="history-container">
+          <p class="empty-text">No queries yet</p>
+        </div>
+      </div>
+
+      <!-- Active Filters -->
+      <div class="sidebar-section">
+        <h3>Active Filters</h3>
+        <div id="activeFilters" class="filters-container">
+          <p class="empty-text">No filters applied</p>
+        </div>
+        <button id="clearFilters" class="btn btn-outline btn-small" disabled>Clear All</button>
+      </div>
+
+      <!-- Version Control -->
+      <div class="sidebar-section">
+        <h3>Version Control</h3>
+        <div id="versionControl" class="version-container">
+          <div class="version-controls">
+            <button id="undoBtn" class="btn btn-outline btn-small" disabled>↶ Undo</button>
+            <button id="redoBtn" class="btn btn-outline btn-small" disabled>↷ Redo</button>
+          </div>
+          <div id="versionHistory" class="version-history">
+            <p class="empty-text">No version history</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-left">
+        <span id="statusText">Ready</span>
+      </div>
+      <div class="status-right">
+        <span id="rowCount">0 rows</span>
+        <span class="separator">•</span>
+        <span id="columnCount">0 columns</span>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p id="loadingText">Loading...</p>
+      </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notifications" class="notifications-container"></div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

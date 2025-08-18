@@ -1,0 +1,91 @@
+{
+  "name": "@datatable/core",
+  "version": "0.1.0",
+  "description": "ES6 client-side JavaScript library for creating ObservableHQ-like interactive data tables",
+  "type": "module",
+  "main": "dist/datatable.js",
+  "module": "dist/datatable.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/datatable.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./worker": "./dist/workers/duckdb.worker.js"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "vite demo --open",
+    "build": "rollup -c",
+    "build:demo": "vite build demo --outDir demo/dist",
+    "preview": "vite preview demo",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "lint": "eslint src/ demo/ tests/",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist/ demo/dist/"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.29.0",
+    "@uwdata/mosaic-core": "^0.18.0",
+    "@uwdata/mosaic-sql": "^0.18.0",
+    "@uwdata/flechette": "^2.1.0",
+    "apache-arrow": "^21.0.0",
+    "d3": "^7.9.0",
+    "@preact/signals-core": "^1.11.0",
+    "codemirror": "^6.0.1",
+    "@codemirror/lang-sql": "^6.9.1",
+    "@codemirror/view": "^6.34.3",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/commands": "^6.7.1",
+    "@codemirror/search": "^6.5.8",
+    "@codemirror/autocomplete": "^6.18.3"
+  },
+  "devDependencies": {
+    "rollup": "^4.46.2",
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-commonjs": "^28.0.1",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-replace": "^6.0.1",
+    "vite": "^7.1.2",
+    "vitest": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
+    "playwright": "^1.49.1",
+    "@playwright/test": "^1.49.1",
+    "eslint": "^9.16.0",
+    "typescript": "^5.7.2",
+    "@types/d3": "^7.4.3",
+    "jsdom": "^25.0.1"
+  },
+  "keywords": [
+    "data-table",
+    "visualization",
+    "mosaic",
+    "duckdb",
+    "observable",
+    "javascript",
+    "es6",
+    "client-side",
+    "sql",
+    "interactive"
+  ],
+  "author": "Jeya Balaji Balasubramanian",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeyabbalas/observable-data-table.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeyabbalas/observable-data-table/issues"
+  },
+  "homepage": "https://github.com/jeyabbalas/observable-data-table#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
