@@ -1,5 +1,6 @@
 // DuckDB Web Worker - Full Implementation
 import * as duckdb from '@duckdb/duckdb-wasm';
+import { detectSchema, getRowCount, getTableInfo, getDataProfile } from '../data/DuckDBHelpers.js';
 
 console.log('DuckDB Worker loading...');
 
@@ -207,9 +208,9 @@ async function loadCSVData(data, tableName, options = {}) {
   
   await conn.query(sql);
   
-  // Get schema information
-  const schema = await getTableSchema(tableName);
-  const rowCount = await getRowCount(tableName);
+  // Get schema information using DuckDBHelpers
+  const schema = await detectSchema(conn, tableName);
+  const rowCount = await getRowCount(conn, tableName);
   
   console.log(`CSV loaded: ${rowCount} rows, ${Object.keys(schema).length} columns`);
   
@@ -238,8 +239,8 @@ async function loadJSONData(data, tableName, options = {}) {
   
   await conn.query(sql);
   
-  const schema = await getTableSchema(tableName);
-  const rowCount = await getRowCount(tableName);
+  const schema = await detectSchema(conn, tableName);
+  const rowCount = await getRowCount(conn, tableName);
   
   console.log(`JSON loaded: ${rowCount} rows, ${Object.keys(schema).length} columns`);
   
@@ -271,8 +272,8 @@ async function loadParquetData(data, tableName, options = {}) {
   
   await conn.query(sql);
   
-  const schema = await getTableSchema(tableName);
-  const rowCount = await getRowCount(tableName);
+  const schema = await detectSchema(conn, tableName);
+  const rowCount = await getRowCount(conn, tableName);
   
   console.log(`Parquet loaded: ${rowCount} rows, ${Object.keys(schema).length} columns`);
   
@@ -314,28 +315,18 @@ async function exportData(payload) {
 }
 
 /**
- * Helper function to get table schema
+ * Get comprehensive data profile for a table in worker context
  */
-async function getTableSchema(tableName) {
-  const result = await conn.query(`DESCRIBE ${tableName}`);
-  const columns = result.toArray();
+async function getWorkerDataProfile(tableName) {
+  if (!initialized || !conn) {
+    throw new Error('DuckDB not initialized. Call init first.');
+  }
   
-  return columns.reduce((schema, col) => {
-    schema[col.column_name] = {
-      type: col.column_type,
-      nullable: col.null === 'YES'
-    };
-    return schema;
-  }, {});
-}
-
-/**
- * Helper function to get row count
- */
-async function getRowCount(tableName) {
-  const result = await conn.query(`SELECT COUNT(*) as count FROM ${tableName}`);
-  const rows = result.toArray();
-  return rows[0].count;
+  try {
+    return await getDataProfile(conn, tableName);
+  } catch (error) {
+    throw new Error(`Data profiling failed: ${error.message}`);
+  }
 }
 
 /**

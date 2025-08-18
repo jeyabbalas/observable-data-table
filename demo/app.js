@@ -194,7 +194,7 @@ class DataTableApp {
     const cities = ['New York', 'San Francisco', 'Chicago', 'Boston', 'Seattle', 'Austin'];
     const names = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'David Wilson', 'Emma Brown', 'Frank Miller', 'Grace Lee', 'Henry Chen', 'Ivy Rodriguez', 'Jack Thompson'];
     
-    let csv = headers.join(',') + '\\n';
+    let csv = headers.join(',') + '\n';
     
     for (let i = 1; i <= 1000; i++) {
       const name = names[Math.floor(Math.random() * names.length)];
@@ -204,7 +204,7 @@ class DataTableApp {
       const department = departments[Math.floor(Math.random() * departments.length)];
       const hireDate = new Date(2020 + Math.floor(Math.random() * 5), Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1).toISOString().split('T')[0];
       
-      csv += `${i},"${name}",${age},"${city}",${salary},"${department}","${hireDate}"\\n`;
+      csv += `${i},"${name}",${age},"${city}",${salary},"${department}","${hireDate}"\n`;
     }
     
     return csv;
@@ -415,12 +415,26 @@ class DataTableApp {
     // Update task status
     if (progress) {
       const task2Badge = document.getElementById('task2Badge');
-      if (progress.task2Complete) {
-        task2Badge.textContent = '✅';
-        task2Badge.className = 'task-badge complete';
-      } else if (progress.task2InProgress) {
-        task2Badge.textContent = '🔄';
-        task2Badge.className = 'task-badge in-progress';
+      if (task2Badge) {
+        if (progress.task2Complete) {
+          task2Badge.textContent = '✅';
+          task2Badge.className = 'task-badge complete';
+        } else if (progress.task2InProgress) {
+          task2Badge.textContent = '🔄';
+          task2Badge.className = 'task-badge in-progress';
+        }
+      }
+      
+      // 🚀 Task 3: Update Task 3 badge
+      const task3Badge = document.getElementById('task3Badge');
+      if (task3Badge) {
+        if (progress.task3Complete) {
+          task3Badge.textContent = '✅';
+          task3Badge.className = 'task-badge complete';
+        } else if (progress.task3InProgress) {
+          task3Badge.textContent = '🔄';
+          task3Badge.className = 'task-badge in-progress';
+        }
       }
     }
     

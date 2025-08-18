@@ -10,6 +10,7 @@ export class TableRenderer extends MosaicClient {
     this.schema = options.schema;
     this.container = options.container;
     this.coordinator = options.coordinator;
+    this.connection = options.connection; // Direct DuckDB connection for fallback queries
     
     // UI elements
     this.tableElement = null;
@@ -22,6 +23,7 @@ export class TableRenderer extends MosaicClient {
     this.orderBy = signal([]);
     this.filters = signal([]);
     this.data = [];
+    this.connected = false;
     
     // Create table structure
     this.createTable();
@@ -29,9 +31,23 @@ export class TableRenderer extends MosaicClient {
   
   async initialize() {
     try {
+      // Reset connection state
+      this.connected = false;
+      
       // Connect to coordinator
       if (this.coordinator) {
-        this.coordinator.connect(this);
+        try {
+          this.coordinator.connect(this);
+          this.connected = true;
+        } catch (error) {
+          // If connection fails, check if it's because we're already connected
+          if (error.message && error.message.includes('already connected')) {
+            console.warn('TableRenderer already connected to coordinator, continuing...');
+            this.connected = true;
+          } else {
+            throw error;
+          }
+        }
       }
       
       // Get field info and render header
@@ -39,6 +55,15 @@ export class TableRenderer extends MosaicClient {
       
       // Load initial data
       this.requestData();
+      
+      // Fallback: If Mosaic coordinator doesn't trigger queryResult, 
+      // manually fetch and display initial data
+      setTimeout(async () => {
+        if (this.data.length === 0) {
+          console.log('No data received via coordinator, attempting direct query...');
+          await this.fallbackDataLoad();
+        }
+      }, 1000); // Wait 1 second for coordinator to respond
       
       return this;
     } catch (error) {
@@ -75,16 +100,21 @@ export class TableRenderer extends MosaicClient {
   }
   
   query(filter = []) {
-    return Query
+    const query = Query
       .from(this.table)
       .select('*')
       .where(filter.concat(this.filters.value))
       .orderby(this.orderBy.value)
       .limit(this.limit)
       .offset(this.offset);
+    
+    console.log('TableRenderer.query() generated:', query.toString());
+    return query;
   }
   
   queryResult(data) {
+    console.log('TableRenderer.queryResult() called with data:', data);
+    console.log('Data type:', typeof data, 'Array?', Array.isArray(data), 'Length:', data?.length);
     this.renderRows(data);
     return this;
   }
@@ -116,6 +146,9 @@ export class TableRenderer extends MosaicClient {
   }
   
   renderHeader(fields) {
+    // Clear existing headers to prevent duplicates
+    this.thead.innerHTML = '';
+    
     const headerRow = document.createElement('tr');
     headerRow.style.backgroundColor = '#f5f5f5';
     headerRow.style.borderBottom = '2px solid #ddd';
@@ -233,9 +266,13 @@ export class TableRenderer extends MosaicClient {
   }
   
   requestData() {
-    if (!this.coordinator) return;
+    if (!this.coordinator || !this.connected) {
+      console.warn('Cannot request data: coordinator not available or not connected');
+      return;
+    }
     
     try {
+      console.log('Requesting data for table:', this.table);
       // Request data through the coordinator
       this.coordinator.requestQuery(this);
     } catch (error) {
@@ -297,9 +334,64 @@ export class TableRenderer extends MosaicClient {
     this.requestData();
   }
   
-  destroy() {
-    if (this.container && this.tableElement) {
-      this.container.removeChild(this.tableElement.parentNode);
+  async fallbackDataLoad() {
+    try {
+      console.log('Attempting fallback data load for table:', this.table);
+      
+      // Try direct DuckDB query first (most reliable)
+      if (this.connection) {
+        console.log('Using direct DuckDB connection for fallback query');
+        
+        // Build SQL query without quotes around table name
+        const sql = `SELECT * FROM ${this.table} LIMIT ${this.limit} OFFSET ${this.offset}`;
+        console.log('Executing SQL directly:', sql);
+        
+        const result = await this.connection.query(sql);
+        const data = result.toArray();
+        
+        if (data && data.length > 0) {
+          console.log('Fallback data load successful via direct DuckDB, received', data.length, 'rows');
+          this.queryResult(data);
+          return;
+        }
+      }
+      
+      // Fallback to coordinator query if direct connection failed
+      if (this.coordinator && this.coordinator.query) {
+        console.log('Trying coordinator query as secondary fallback');
+        const query = this.query(); // Get our query
+        const result = await this.coordinator.query(query);
+        
+        if (result && result.length > 0) {
+          console.log('Fallback data load successful via coordinator, received', result.length, 'rows');
+          this.queryResult(result);
+          return;
+        }
+      }
+      
+      console.warn('Fallback data load failed - no data received from any method');
+    } catch (error) {
+      console.error('Fallback data load error:', error);
     }
+  }
+
+  destroy() {
+    // Disconnect from coordinator if connected
+    if (this.coordinator && this.connected) {
+      // Note: Mosaic coordinator doesn't have a disconnect method, 
+      // but we track our connection state
+      this.connected = false;
+    }
+    
+    // Clear container completely
+    if (this.container) {
+      this.container.innerHTML = '';
+    }
+    
+    // Clear references
+    this.tableElement = null;
+    this.thead = null;
+    this.tbody = null;
+    this.data = [];
   }
 }

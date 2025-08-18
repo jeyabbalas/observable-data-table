@@ -1,4 +1,6 @@
 // DataLoader for handling various data formats
+import { detectSchema, getRowCount, getTableInfo } from './DuckDBHelpers.js';
+
 export class DataLoader {
   constructor(dataTable) {
     this.dataTable = dataTable;
@@ -79,26 +81,26 @@ export class DataLoader {
       
       const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
       
-      // Register the CSV data as a file in DuckDB's virtual filesystem
-      const fileName = `${tableName}.csv`;
-      await this.dataTable.db.registerFileText(fileName, text);
+      try {
+        // Register the CSV data as a file in DuckDB's virtual filesystem
+        const fileName = `${tableName}.csv`;
+        this.dataTable.log.debug(`Registering CSV file: ${fileName} (${text.length} characters)`);
+        await this.dataTable.db.registerFileText(fileName, text);
+        
+        // Use DuckDB's read_csv_auto for automatic schema detection
+        const sql = `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM read_csv_auto('${fileName}', delim='${delimiter}', header=true, auto_detect=true, sample_size=1000)`;
+        
+        this.dataTable.log.debug(`Executing SQL: ${sql}`);
+        await this.dataTable.conn.query(sql);
+        
+      } catch (duckdbError) {
+        this.dataTable.log.error('DuckDB operation failed:', duckdbError);
+        throw new Error(`Failed to load CSV data: ${duckdbError.message}`);
+      }
       
-      // Use DuckDB's read_csv_auto for automatic schema detection
-      const sql = `
-        CREATE OR REPLACE TABLE ${tableName} AS 
-        SELECT * FROM read_csv_auto('${fileName}', 
-          delim='${delimiter}',
-          header=true,
-          auto_detect=true,
-          sample_size=1000
-        )
-      `;
-      
-      await this.dataTable.conn.query(sql);
-      
-      // Get schema information
-      const schema = await this.getTableSchema(tableName);
-      const rowCount = await this.getRowCount(tableName);
+      // Get schema information using DuckDBHelpers
+      const schema = await detectSchema(this.dataTable.conn, tableName);
+      const rowCount = await getRowCount(this.dataTable.conn, tableName);
       
       this.dataTable.log.info(`CSV loaded: ${rowCount} rows, ${Object.keys(schema).length} columns`);
       
@@ -146,35 +148,16 @@ export class DataLoader {
   }
   
   /**
-   * Helper function to get table schema in direct mode
+   * Get comprehensive data profile for the loaded table
+   * @param {string} tableName - Name of the table to profile
+   * @returns {Object} Complete data profile including schema and statistics
    */
-  async getTableSchema(tableName) {
+  async getDataProfile(tableName) {
     if (!this.dataTable.conn) {
       throw new Error('No DuckDB connection available');
     }
     
-    const result = await this.dataTable.conn.query(`DESCRIBE ${tableName}`);
-    const columns = result.toArray();
-    
-    return columns.reduce((schema, col) => {
-      schema[col.column_name] = {
-        type: col.column_type,
-        nullable: col.null === 'YES'
-      };
-      return schema;
-    }, {});
-  }
-  
-  /**
-   * Helper function to get row count in direct mode
-   */
-  async getRowCount(tableName) {
-    if (!this.dataTable.conn) {
-      throw new Error('No DuckDB connection available');
-    }
-    
-    const result = await this.dataTable.conn.query(`SELECT COUNT(*) as count FROM ${tableName}`);
-    const rows = result.toArray();
-    return rows[0].count;
+    const { getDataProfile } = await import('./DuckDBHelpers.js');
+    return getDataProfile(this.dataTable.conn, tableName);
   }
 }

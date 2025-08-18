@@ -5,6 +5,7 @@ import { DataLoader } from '../data/DataLoader.js';
 import { PersistenceManager } from '../storage/PersistenceManager.js';
 import { VersionControl } from '../storage/VersionControl.js';
 import { TableRenderer } from './TableRenderer.js';
+import { detectSchema, getDataProfile } from '../data/DuckDBHelpers.js';
 
 export class DataTable {
   constructor(options = {}) {
@@ -55,6 +56,8 @@ export class DataTable {
       task1Complete: true, // ✅ Task 1 completed
       task2InProgress: false,
       task2Complete: false,
+      task3InProgress: false,
+      task3Complete: false,
       currentOperation: null,
       lastUpdate: null
     };
@@ -86,12 +89,13 @@ export class DataTable {
   logTaskProgress() {
     console.group('🚀 DataTable Phase 1 Progress');
     console.log('✅ Task 1: DuckDB-WASM Worker Initialization - COMPLETED');
-    console.log('🔄 Task 2: Enhanced Direct Mode & Progress Tracking - STARTING');
+    console.log('✅ Task 2: Enhanced Direct Mode & Progress Tracking - COMPLETED');
+    console.log('🔄 Task 3: DuckDB Helper Utilities - STARTING');
     console.log('📊 Mode Preference:', this.options.useWorker ? 'Worker' : 'Direct');
-    console.log('📱 Progress tracking initialized');
+    console.log('🔧 DuckDBHelpers: Schema detection, data profiling, utilities');
     console.groupEnd();
     
-    this.progress.task2InProgress = true;
+    this.progress.task3InProgress = true;
     this.progress.lastUpdate = Date.now();
   }
   
@@ -141,6 +145,21 @@ export class DataTable {
     this.progress.task2InProgress = false;
     this.updateProgress('Task 2 Complete');
   }
+
+  logTask3Completion() {
+    console.group('🚀 DataTable Task 3 Progress');
+    console.log('✅ Task 3: DuckDB Helper Utilities - COMPLETED');
+    console.log('🔧 Utilities: detectSchema, getRowCount, getDataProfile');
+    console.log('📊 Code Consolidation: Removed duplicated helpers from DataLoader and Worker');
+    console.log('📈 Enhanced Features: Column stats, distinct values, data profiling');
+    console.log('🧪 Testing: Comprehensive unit tests for all helper functions');
+    console.log('📊 Progress: Foundation ready for advanced visualizations');
+    console.groupEnd();
+    
+    this.progress.task3Complete = true;
+    this.progress.task3InProgress = false;
+    this.updateProgress('Task 3 Complete');
+  }
   
   async initialize() {
     try {
@@ -187,6 +206,9 @@ export class DataTable {
       
       // 🚀 Task 2: Log completion
       this.logTask2Completion();
+      
+      // 🚀 Task 3: DuckDB Helper Utilities are now active
+      this.logTask3Completion();
       
       return this;
     } catch (error) {
@@ -236,9 +258,29 @@ export class DataTable {
       this.updateProgress('Creating DuckDB instance');
       const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
       
-      // Initialize DuckDB directly (no worker in direct mode)
-      this.db = new duckdb.AsyncDuckDB(logger);
+      // 🚀 Even in "direct" mode, AsyncDuckDB requires a worker
+      // Create a worker internally but don't expose worker management to the user
+      this.updateProgress('Creating internal worker for DuckDB');
+      
+      // Create worker URL using Blob to avoid CORS issues
+      const workerCode = `importScripts("${bundle.mainWorker}");`;
+      const workerBlob = new Blob([workerCode], { type: 'text/javascript' });
+      const workerUrl = URL.createObjectURL(workerBlob);
+      
+      // Create worker instance
+      this.worker = new Worker(workerUrl);
+      
+      // Setup basic error handling for the internal worker
+      this.worker.onerror = (error) => {
+        this.log.error('Internal worker error in direct mode:', error);
+      };
+      
+      // Initialize DuckDB with the worker (required by AsyncDuckDB)
+      this.db = new duckdb.AsyncDuckDB(logger, this.worker);
       await this.db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      
+      // Clean up the blob URL
+      URL.revokeObjectURL(workerUrl);
       
       // Create a connection
       this.updateProgress('Establishing database connection');
@@ -426,13 +468,21 @@ export class DataTable {
       // 🚀 Task 2: Track table creation
       this.updateProgress('Creating table renderer');
       
-      // Create table renderer if not exists
-      if (!this.tableRenderer && this.container) {
+      // Create or update table renderer
+      if (this.container) {
+        if (this.tableRenderer) {
+          // Destroy existing renderer before creating new one
+          this.tableRenderer.destroy();
+          this.tableRenderer = null;
+        }
+        
+        // Create new table renderer
         this.tableRenderer = new TableRenderer({
           table: this.tableName.value,
           schema: this.schema.value,
           container: this.container,
-          coordinator: this.coordinator
+          coordinator: this.coordinator,
+          connection: this.conn // Pass DuckDB connection for direct queries
         });
         
         await this.tableRenderer.initialize();
