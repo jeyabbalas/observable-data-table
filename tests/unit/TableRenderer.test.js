@@ -5,6 +5,10 @@ import { TableRenderer } from '../../src/core/TableRenderer.js';
 vi.mock('@uwdata/mosaic-core', () => ({
   MosaicClient: class MockMosaicClient {
     constructor() {}
+    initialize() {
+      // Mock parent initialize method
+      return Promise.resolve();
+    }
   },
   Selection: {
     crossfilter: vi.fn(() => ({}))

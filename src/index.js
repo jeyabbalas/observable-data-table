@@ -9,6 +9,8 @@ export { DataLoader } from './data/DataLoader.js';
 export { CloudStorage } from './data/CloudStorage.js';
 export { DataConnector } from './data/DataConnector.js';
 
+export { WorkerConnector } from './connectors/WorkerConnector.js';
+
 export { Histogram } from './visualizations/Histogram.js';
 export { ValueCounts } from './visualizations/ValueCounts.js';
 export { DateHistogram } from './visualizations/DateHistogram.js';

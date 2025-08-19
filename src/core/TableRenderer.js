@@ -31,30 +31,13 @@ export class TableRenderer extends MosaicClient {
   
   async initialize() {
     try {
-      // Reset connection state
-      this.connected = false;
+      // Reset connection state and mark as connected 
+      // (coordinator.connect() will have been called by DataTable)
+      this.connected = true;
       
-      // Connect to coordinator
-      if (this.coordinator) {
-        try {
-          this.coordinator.connect(this);
-          this.connected = true;
-        } catch (error) {
-          // If connection fails, check if it's because we're already connected
-          if (error.message && error.message.includes('already connected')) {
-            console.warn('TableRenderer already connected to coordinator, continuing...');
-            this.connected = true;
-          } else {
-            throw error;
-          }
-        }
-      }
-      
-      // Get field info and render header
-      await this.prepare();
-      
-      // Load initial data
-      this.requestData();
+      // Call parent MosaicClient initialize() to handle the proper Mosaic flow
+      // This will call prepare() then requestQuery() through the coordinator
+      super.initialize();
       
       // Fallback: If Mosaic coordinator doesn't trigger queryResult, 
       // manually fetch and display initial data
@@ -115,6 +98,21 @@ export class TableRenderer extends MosaicClient {
   queryResult(data) {
     console.log('TableRenderer.queryResult() called with data:', data);
     console.log('Data type:', typeof data, 'Array?', Array.isArray(data), 'Length:', data?.length);
+    
+    // Handle Apache Arrow Table format from Mosaic wasmConnector
+    // Arrow tables have a toArray() method to convert to JavaScript arrays
+    if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.toArray === 'function') {
+      console.log('Converting Apache Arrow Table to JavaScript array');
+      try {
+        data = data.toArray();
+        console.log('Arrow conversion successful, new length:', data.length);
+      } catch (error) {
+        console.error('Failed to convert Arrow Table to array:', error);
+        // Fall back to empty array if conversion fails
+        data = [];
+      }
+    }
+    
     this.renderRows(data);
     return this;
   }

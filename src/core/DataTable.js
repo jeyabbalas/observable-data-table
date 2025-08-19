@@ -5,6 +5,7 @@ import { DataLoader } from '../data/DataLoader.js';
 import { PersistenceManager } from '../storage/PersistenceManager.js';
 import { VersionControl } from '../storage/VersionControl.js';
 import { TableRenderer } from './TableRenderer.js';
+import { WorkerConnector } from '../connectors/WorkerConnector.js';
 import { detectSchema, getDataProfile } from '../data/DuckDBHelpers.js';
 
 export class DataTable {
@@ -295,9 +296,12 @@ export class DataTable {
         this.performance.duckdbVersion = 'unknown';
       }
       
-      // Setup Mosaic connector with the DuckDB instance
+      // Setup Mosaic connector with the DuckDB connection
       this.updateProgress('Configuring Mosaic coordinator');
-      this.connector = wasmConnector({ duckdb: this.db });
+      this.connector = wasmConnector({ 
+        duckdb: this.db,
+        connection: this.conn 
+      });
       this.coordinator.databaseConnector(this.connector);
       
       // 🚀 Task 2: Capture memory usage if available
@@ -367,6 +371,11 @@ export class DataTable {
           total: Math.round(performance.memory.totalJSHeapSize / 1024 / 1024) + 'MB'
         };
       }
+      
+      // Setup Mosaic connector for worker mode
+      this.updateProgress('Configuring Mosaic coordinator for worker');
+      this.connector = new WorkerConnector(this);
+      this.coordinator.databaseConnector(this.connector);
       
       this.log.debug('DuckDB Web Worker initialized');
       this.updateProgress('Worker initialization complete');
@@ -485,7 +494,13 @@ export class DataTable {
           connection: this.conn // Pass DuckDB connection for direct queries
         });
         
-        await this.tableRenderer.initialize();
+        // Connect TableRenderer to coordinator (this will trigger initialization)
+        if (this.coordinator) {
+          this.coordinator.connect(this.tableRenderer);
+        } else {
+          // If no coordinator, initialize directly
+          await this.tableRenderer.initialize();
+        }
       }
       
       // Save to persistence if enabled
