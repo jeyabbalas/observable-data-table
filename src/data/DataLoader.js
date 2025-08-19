@@ -118,15 +118,116 @@ export class DataLoader {
   }
   
   async loadJSON(data, options = {}) {
-    // TODO: Implement JSON loading
-    console.log('JSON loading - Coming soon!');
-    return { tableName: 'data', schema: {} };
+    const tableName = options.tableName || 'data';
+    
+    this.dataTable.log.info(`Loading JSON data into table: ${tableName}`);
+    
+    if (this.dataTable.options.useWorker) {
+      // Worker mode
+      const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+      const result = await this.dataTable.sendToWorker('load', {
+        format: 'json',
+        data: text,
+        tableName,
+        options
+      });
+      
+      return result;
+    } else {
+      // Direct mode
+      if (!this.dataTable.db || !this.dataTable.conn) {
+        throw new Error('DuckDB not properly initialized in direct mode');
+      }
+      
+      const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+      
+      try {
+        // Register the JSON data as a file in DuckDB's virtual filesystem
+        const fileName = `${tableName}.json`;
+        this.dataTable.log.debug(`Registering JSON file: ${fileName} (${text.length} characters)`);
+        await this.dataTable.db.registerFileText(fileName, text);
+        
+        // Use DuckDB's read_json_auto for automatic schema detection
+        const sql = `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM read_json_auto('${fileName}')`;
+        
+        this.dataTable.log.debug(`Executing SQL: ${sql}`);
+        await this.dataTable.conn.query(sql);
+        
+      } catch (duckdbError) {
+        this.dataTable.log.error('DuckDB operation failed:', duckdbError);
+        throw new Error(`Failed to load JSON data: ${duckdbError.message}`);
+      }
+      
+      // Get schema information using DuckDBHelpers
+      const schema = await detectSchema(this.dataTable.conn, tableName);
+      const rowCount = await getRowCount(this.dataTable.conn, tableName);
+      
+      this.dataTable.log.info(`JSON loaded: ${rowCount} rows, ${Object.keys(schema).length} columns`);
+      
+      return {
+        tableName,
+        schema,
+        rowCount,
+        format: 'json'
+      };
+    }
   }
   
   async loadParquet(data, options = {}) {
-    // TODO: Implement Parquet loading
-    console.log('Parquet loading - Coming soon!');
-    return { tableName: 'data', schema: {} };
+    const tableName = options.tableName || 'data';
+    
+    this.dataTable.log.info(`Loading Parquet data into table: ${tableName}`);
+    
+    if (this.dataTable.options.useWorker) {
+      // Worker mode
+      const result = await this.dataTable.sendToWorker('load', {
+        format: 'parquet',
+        data: data,
+        tableName,
+        options
+      });
+      
+      return result;
+    } else {
+      // Direct mode
+      if (!this.dataTable.db || !this.dataTable.conn) {
+        throw new Error('DuckDB not properly initialized in direct mode');
+      }
+      
+      try {
+        // Register the Parquet data as a file in DuckDB's virtual filesystem
+        const fileName = `${tableName}.parquet`;
+        
+        // Convert data to Uint8Array if it's an ArrayBuffer
+        const uint8Data = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+        
+        this.dataTable.log.debug(`Registering Parquet file: ${fileName} (${uint8Data.length} bytes)`);
+        await this.dataTable.db.registerFileBuffer(fileName, uint8Data);
+        
+        // Use DuckDB's parquet_scan
+        const sql = `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM parquet_scan('${fileName}')`;
+        
+        this.dataTable.log.debug(`Executing SQL: ${sql}`);
+        await this.dataTable.conn.query(sql);
+        
+      } catch (duckdbError) {
+        this.dataTable.log.error('DuckDB operation failed:', duckdbError);
+        throw new Error(`Failed to load Parquet data: ${duckdbError.message}`);
+      }
+      
+      // Get schema information using DuckDBHelpers
+      const schema = await detectSchema(this.dataTable.conn, tableName);
+      const rowCount = await getRowCount(this.dataTable.conn, tableName);
+      
+      this.dataTable.log.info(`Parquet loaded: ${rowCount} rows, ${Object.keys(schema).length} columns`);
+      
+      return {
+        tableName,
+        schema,
+        rowCount,
+        format: 'parquet'
+      };
+    }
   }
   
   async loadURL(url, options = {}) {

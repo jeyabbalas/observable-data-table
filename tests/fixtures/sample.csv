@@ -1,11 +1,11 @@
-name,age,city,salary
-Alice Johnson,30,New York,75000
-Bob Smith,25,Los Angeles,65000
-Carol Davis,35,Chicago,80000
-David Wilson,28,Houston,70000
-Eva Brown,32,Phoenix,72000
-Frank Miller,29,Philadelphia,68000
-Grace Taylor,31,San Antonio,71000
-Henry Anderson,27,San Diego,69000
-Iris Thomas,33,Dallas,73000
-Jack Jackson,26,San Jose,74000
+name,age,city,score,active,join_date,salary
+Alice,30,New York,95.5,true,2023-01-15,75000
+Bob,25,San Francisco,87.2,true,2023-02-20,80000
+Charlie,35,Chicago,92.8,false,2023-03-10,70000
+Diana,28,Boston,89.1,true,2023-04-05,85000
+Eve,32,Seattle,91.5,true,2023-05-12,78000
+Frank,29,Austin,88.7,false,2023-06-18,73000
+Grace,31,Portland,94.2,true,2023-07-22,82000
+Henry,27,Denver,86.3,true,2023-08-30,76000
+Irene,33,Miami,90.8,false,2023-09-14,79000
+Jack,26,Phoenix,84.9,true,2023-10-08,74000

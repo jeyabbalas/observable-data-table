@@ -1,0 +1,7 @@
+[
+  {"name": "Alice", "age": 30, "city": "New York", "score": 95.5, "active": true, "join_date": "2023-01-15", "salary": 75000},
+  {"name": "Bob", "age": 25, "city": "San Francisco", "score": 87.2, "active": true, "join_date": "2023-02-20", "salary": 80000},
+  {"name": "Charlie", "age": 35, "city": "Chicago", "score": 92.8, "active": false, "join_date": "2023-03-10", "salary": 70000},
+  {"name": "Diana", "age": 28, "city": "Boston", "score": 89.1, "active": true, "join_date": "2023-04-05", "salary": 85000},
+  {"name": "Eve", "age": 32, "city": "Seattle", "score": 91.5, "active": true, "join_date": "2023-05-12", "salary": 78000}
+]
