@@ -352,6 +352,16 @@ class DataTableApp {
     
     // Update status
     this.updateStatus('Ready');
+    
+    // Restore empty state in table container
+    const tableContainer = document.getElementById('tableContainer');
+    tableContainer.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📊</div>
+        <h3>No Data Loaded</h3>
+        <p>Upload a file or load data from a URL to get started</p>
+      </div>
+    `;
   }
   
   updateStatus(text) {

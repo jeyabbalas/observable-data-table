@@ -477,6 +477,9 @@ export class DataTable {
   }
   
   createContainer() {
+    // Clear any existing content (e.g., empty state)
+    this.options.container.innerHTML = '';
+    
     this.container = document.createElement('div');
     this.container.className = 'datatable-container';
     this.container.style.height = `${this.options.height}px`;
