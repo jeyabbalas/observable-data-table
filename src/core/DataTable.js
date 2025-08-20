@@ -508,6 +508,16 @@ export class DataTable {
       // 🚀 Task 2: Track table creation
       this.updateProgress('Creating table renderer');
       
+      // Ensure container is still in DOM (may have been removed by external code)
+      if (this.container && !document.contains(this.container)) {
+        this.container = null; // Clear stale reference
+      }
+      
+      // Create container if needed
+      if (!this.container) {
+        this.createContainer();
+      }
+      
       // Create or update table renderer
       if (this.container) {
         if (this.tableRenderer) {
@@ -653,12 +663,11 @@ export class DataTable {
         await this.versionControl.clear();
       }
       
-      // Clear UI
-      if (this.container) {
-        this.container.innerHTML = '';
+      // Clear UI - properly destroy table renderer instead of clearing container
+      if (this.tableRenderer) {
+        this.tableRenderer.destroy();
+        this.tableRenderer = null;
       }
-      
-      this.tableRenderer = null;
       this.visualizations.clear();
       
       this.log.info('Data cleared successfully');
