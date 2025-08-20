@@ -66,8 +66,7 @@ export class DataTable {
     // Setup logging
     this.setupLogging();
     
-    // Bind methods
-    this.handleWorkerMessage = this.handleWorkerMessage.bind(this);
+    // Bind methods (none needed currently)
     
     // 🚀 Log Task 2 initialization
     this.logTaskProgress();
@@ -263,10 +262,23 @@ export class DataTable {
       // Create a worker internally but don't expose worker management to the user
       this.updateProgress('Creating internal worker for DuckDB');
       
-      // Create worker URL using Blob to avoid CORS issues
-      const workerCode = `importScripts("${bundle.mainWorker}");`;
-      const workerBlob = new Blob([workerCode], { type: 'text/javascript' });
-      const workerUrl = URL.createObjectURL(workerBlob);
+      // Create worker using the bundle URL directly or via Blob (browser only)
+      let workerUrl = bundle.mainWorker;
+      let needsCleanup = false;
+      
+      // In browsers, try to use Blob to avoid CORS issues
+      if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
+        try {
+          const workerCode = `importScripts("${bundle.mainWorker}");`;
+          const workerBlob = new Blob([workerCode], { type: 'text/javascript' });
+          workerUrl = URL.createObjectURL(workerBlob);
+          needsCleanup = true;
+        } catch (e) {
+          // Fallback to direct URL if Blob approach fails
+          this.log.debug('Blob worker creation failed, using direct URL:', e.message);
+          workerUrl = bundle.mainWorker;
+        }
+      }
       
       // Create worker instance
       this.worker = new Worker(workerUrl);
@@ -280,8 +292,10 @@ export class DataTable {
       this.db = new duckdb.AsyncDuckDB(logger, this.worker);
       await this.db.instantiate(bundle.mainModule, bundle.pthreadWorker);
       
-      // Clean up the blob URL
-      URL.revokeObjectURL(workerUrl);
+      // Clean up the blob URL if we created one
+      if (needsCleanup && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        URL.revokeObjectURL(workerUrl);
+      }
       
       // Create a connection
       this.updateProgress('Establishing database connection');
@@ -321,50 +335,97 @@ export class DataTable {
       throw new Error(`Direct DuckDB initialization failed: ${error.message}`);
     }
   }
+
   
   async initializeWorker() {
-    this.log.debug('Initializing DuckDB Web Worker...');
+    this.log.debug('Initializing DuckDB with Web Worker...');
     
     try {
       // 🚀 Task 2: Track worker initialization
-      this.updateProgress('Creating Web Worker');
+      this.updateProgress('Creating DuckDB Web Worker');
       
-      // Initialize with Web Worker
-      this.worker = new Worker(
-        new URL('../workers/duckdb.worker.js', import.meta.url),
-        { type: 'module' }
-      );
+      // Import DuckDB-WASM for worker mode
+      const duckdb = await import('@duckdb/duckdb-wasm');
       
-      // Setup worker message handling
-      this.worker.onmessage = this.handleWorkerMessage;
-      this.worker.onerror = (error) => {
-        this.log.error('Worker error:', error);
-        this.updateProgress('Worker failed, falling back to direct mode');
-        // Fallback to direct initialization
-        this.log.warn('Worker failed, falling back to direct DuckDB initialization');
-        this.options.useWorker = false;
-        this.performance.mode = 'Direct (fallback)';
-        return this.initializeDirect();
+      // Get DuckDB bundles and select the best one for this browser
+      const bundles = duckdb.getJsDelivrBundles();
+      const bundle = await duckdb.selectBundle(bundles);
+      
+      this.log.debug('Selected DuckDB bundle:', bundle.mainModule.includes('eh') ? 'eh' : 'mvp');
+      
+      // Create worker using the bundle URL directly or via Blob to avoid CORS issues
+      let workerUrl = bundle.mainWorker;
+      let needsCleanup = false;
+      
+      // In browsers, try to use Blob to avoid CORS issues
+      if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
+        try {
+          const workerCode = `importScripts("${bundle.mainWorker}");`;
+          const workerBlob = new Blob([workerCode], { type: 'text/javascript' });
+          workerUrl = URL.createObjectURL(workerBlob);
+          needsCleanup = true;
+        } catch (e) {
+          // Fallback to direct URL if Blob approach fails
+          this.log.debug('Blob worker creation failed, using direct URL:', e.message);
+          workerUrl = bundle.mainWorker;
+        }
+      }
+      
+      // Create worker using the official DuckDB worker file
+      this.worker = new Worker(workerUrl);
+      
+      // Create logger
+      const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
+      
+      // Initialize AsyncDuckDB with the worker (proper pattern)
+      this.updateProgress('Initializing DuckDB with worker');
+      this.db = new duckdb.AsyncDuckDB(logger, this.worker);
+      await this.db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      
+      // Clean up the blob URL if we created one
+      if (needsCleanup && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        URL.revokeObjectURL(workerUrl);
+      }
+      
+      // Create a connection
+      this.updateProgress('Establishing database connection');
+      this.conn = await this.db.connect();
+      
+      // Configure DuckDB for optimal performance (WASM-compatible settings only)
+      const config = {
+        'max_memory': '512MB',
+        'enable_object_cache': 'true'
       };
       
-      // Initialize DuckDB in worker with shorter timeout for development
-      this.updateProgress('Initializing DuckDB in worker');
-      const result = await this.sendToWorker('init', {
-        config: {
-          'max_memory': '512MB',
-          'threads': '4'
+      for (const [key, value] of Object.entries(config)) {
+        try {
+          await this.conn.query(`SET ${key}='${value}'`);
+        } catch (e) {
+          this.log.warn(`Failed to set ${key}=${value}:`, e.message);
         }
+      }
+      
+      // Get DuckDB version for progress tracking
+      try {
+        const versionResult = await this.conn.query('SELECT version() as version');
+        const versionData = versionResult.toArray();
+        this.performance.duckdbVersion = versionData[0]?.version || 'unknown';
+      } catch (e) {
+        this.performance.duckdbVersion = 'unknown';
+      }
+      
+      // Set bundle type for progress tracking
+      this.performance.bundleType = 'worker';
+      
+      // Setup Mosaic connector with the DuckDB connection
+      this.updateProgress('Configuring Mosaic coordinator');
+      this.connector = wasmConnector({ 
+        duckdb: this.db,
+        connection: this.conn 
       });
+      this.coordinator.databaseConnector(this.connector);
       
-      // 🚀 Task 2: Capture worker performance info
-      if (result && result.version) {
-        this.performance.duckdbVersion = result.version;
-      }
-      if (result && result.config) {
-        this.performance.bundleType = 'worker';
-      }
-      
-      // 🚀 Task 2: Capture memory usage if available
+      // Capture memory usage if available
       if (performance.memory) {
         this.performance.memoryUsage = {
           used: Math.round(performance.memory.usedJSHeapSize / 1024 / 1024) + 'MB',
@@ -372,65 +433,32 @@ export class DataTable {
         };
       }
       
-      // Setup Mosaic connector for worker mode
-      this.updateProgress('Configuring Mosaic coordinator for worker');
-      this.connector = new WorkerConnector(this);
-      this.coordinator.databaseConnector(this.connector);
-      
-      this.log.debug('DuckDB Web Worker initialized');
-      this.updateProgress('Worker initialization complete');
+      this.log.debug('DuckDB Worker initialization completed successfully');
+      this.updateProgress('Worker mode initialization complete');
       
     } catch (error) {
       this.log.warn('Worker initialization failed, falling back to direct mode:', error.message);
       this.updateProgress('Worker failed, falling back to direct mode', { error: error.message });
       this.options.useWorker = false;
       this.performance.mode = 'Direct (fallback)';
-      return this.initializeDirect();
+      
+      // Cleanup failed worker
+      if (this.worker) {
+        this.worker.terminate();
+        this.worker = null;
+      }
+      
+      if (this.db) {
+        await this.db.terminate();
+        this.db = null;
+      }
+      
+      // Fallback to direct mode
+      await this.initializeDirect();
     }
   }
   
-  handleWorkerMessage(event) {
-    const { id, success, result, error } = event.data;
-    
-    if (this.workerPromises && this.workerPromises.has(id)) {
-      const { resolve, reject } = this.workerPromises.get(id);
-      this.workerPromises.delete(id);
-      
-      if (success) {
-        resolve(result);
-      } else {
-        reject(new Error(error));
-      }
-    }
-  }
   
-  sendToWorker(type, payload) {
-    if (!this.worker) {
-      throw new Error('Worker not initialized');
-    }
-    
-    return new Promise((resolve, reject) => {
-      const id = crypto.randomUUID();
-      
-      // Initialize worker promises map if needed
-      if (!this.workerPromises) {
-        this.workerPromises = new Map();
-      }
-      
-      this.workerPromises.set(id, { resolve, reject });
-      
-      // Send message to worker
-      this.worker.postMessage({ id, type, payload });
-      
-      // Set timeout for worker operations (shorter for development)
-      setTimeout(() => {
-        if (this.workerPromises.has(id)) {
-          this.workerPromises.delete(id);
-          reject(new Error('Worker operation timeout'));
-        }
-      }, 5000); // 5 second timeout
-    });
-  }
   
   async initializePersistence() {
     this.log.debug('Initializing persistence...');
@@ -545,13 +573,13 @@ export class DataTable {
     try {
       this.log.debug('Executing SQL:', sql);
       
-      let result;
-      if (this.options.useWorker) {
-        result = await this.sendToWorker('exec', { sql });
-      } else {
-        const query = this.coordinator.query(Query.sql(sql));
-        result = await query;
+      // Both Worker and Direct modes use the same connection approach now
+      if (!this.conn) {
+        throw new Error('DuckDB connection not available');
       }
+      
+      // Execute SQL query using the unified connection
+      const result = await this.conn.query(sql);
       
       // Update current SQL
       this.currentSQL.value = sql;

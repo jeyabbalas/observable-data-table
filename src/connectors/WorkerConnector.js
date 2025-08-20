@@ -18,6 +18,15 @@ export class WorkerConnector {
     const { type, sql } = request;
     
     try {
+      // Validate that DataTable and worker are available
+      if (!this.dataTable) {
+        throw new Error('DataTable not available in WorkerConnector');
+      }
+      
+      if (!this.dataTable.worker) {
+        throw new Error('Worker not initialized - cannot execute query');
+      }
+      
       if (type === 'exec') {
         // Execute query without expecting results
         await this.dataTable.sendToWorker('exec', { sql });
@@ -37,7 +46,8 @@ export class WorkerConnector {
       }
     } catch (error) {
       console.error('WorkerConnector query failed:', error);
-      throw error;
+      console.error('Query details:', { type, sql: sql?.substring(0, 100) + '...' });
+      throw new Error(`Worker query failed: ${error.message}`);
     }
   }
 
