@@ -1,5 +1,5 @@
 import { MosaicClient, Selection } from '@uwdata/mosaic-core';
-import { Query } from '@uwdata/mosaic-sql';
+import { Query, asc, desc } from '@uwdata/mosaic-sql';
 import { signal } from '@preact/signals-core';
 
 export class TableRenderer extends MosaicClient {
@@ -83,15 +83,22 @@ export class TableRenderer extends MosaicClient {
   }
   
   query(filter = []) {
+    // Convert orderBy array to Mosaic SQL format
+    const orderByExprs = this.orderBy.value.map(({ field, order }) => 
+      order === 'DESC' ? desc(field) : asc(field)
+    );
+    
     const query = Query
       .from(this.table)
       .select('*')
       .where(filter.concat(this.filters.value))
-      .orderby(this.orderBy.value)
+      .orderby(...orderByExprs)
       .limit(this.limit)
       .offset(this.offset);
     
     console.log('TableRenderer.query() generated:', query.toString());
+    console.log('OrderBy expressions:', orderByExprs);
+    console.log('Current orderBy value:', this.orderBy.value);
     return query;
   }
   
@@ -115,6 +122,20 @@ export class TableRenderer extends MosaicClient {
     
     this.renderRows(data);
     return this;
+  }
+
+  queryPending() {
+    console.log('Query pending for table:', this.table);
+    // Could add loading indicator here if needed
+  }
+
+  queryError(error) {
+    console.error('Query error for table:', this.table, error);
+    // Try to recover or show error to user
+    if (this.fallbackDataLoad) {
+      console.log('Attempting fallback data load due to query error');
+      this.fallbackDataLoad();
+    }
   }
   
   async prepare() {
@@ -271,8 +292,8 @@ export class TableRenderer extends MosaicClient {
     
     try {
       console.log('Requesting data for table:', this.table);
-      // Request data through the coordinator
-      this.coordinator.requestQuery(this);
+      // FIXED: Use the MosaicClient's requestQuery method which handles everything correctly
+      this.requestQuery();
     } catch (error) {
       console.error('Failed to request data:', error);
     } finally {
