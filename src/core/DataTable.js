@@ -5,7 +5,6 @@ import { DataLoader } from '../data/DataLoader.js';
 import { PersistenceManager } from '../storage/PersistenceManager.js';
 import { VersionControl } from '../storage/VersionControl.js';
 import { TableRenderer } from './TableRenderer.js';
-import { WorkerConnector } from '../connectors/WorkerConnector.js';
 import { detectSchema, getDataProfile } from '../data/DuckDBHelpers.js';
 
 export class DataTable {
@@ -272,11 +271,8 @@ export class DataTable {
       // Create a connection
       this.conn = await this.db.connect();
       
-      // Configure DuckDB for optimal performance (WASM-compatible settings only)
-      const config = {
-        'max_memory': '512MB',
-        'enable_object_cache': 'true'
-      };
+      // Configure DuckDB for optimal performance with adaptive memory
+      const config = this.getOptimalDuckDBConfig();
       
       for (const [key, value] of Object.entries(config)) {
         try {
@@ -327,7 +323,13 @@ export class DataTable {
       }
       
       if (this.db) {
-        await this.db.terminate();
+        try {
+          if (typeof this.db.terminate === 'function') {
+            await this.db.terminate();
+          }
+        } catch (error) {
+          this.log.warn('Error terminating DuckDB in fallback:', error);
+        }
         this.db = null;
       }
       
@@ -493,7 +495,7 @@ export class DataTable {
     }
   }
   
-  async executeSQL(sql) {
+  async executeSQL(sql, options = {}) {
     try {
       this.log.debug('Executing SQL:', sql);
       
@@ -502,17 +504,28 @@ export class DataTable {
         throw new Error('DuckDB connection not available');
       }
       
-      // Execute SQL query using the unified connection
-      const result = await this.conn.query(sql);
+      // For large queries, use streaming when available
+      const useStreaming = options.streaming && this.conn.send;
+      let result;
+      
+      if (useStreaming) {
+        // Use streaming for large result sets
+        this.log.debug('Using streaming query execution');
+        result = await this.conn.send(sql);
+      } else {
+        // Standard query execution
+        result = await this.conn.query(sql);
+      }
       
       // Update current SQL
       this.currentSQL.value = sql;
       
-      // Add to history
+      // Add to history with result size tracking
       this.queryHistory.push({
         sql,
         timestamp: Date.now(),
-        result: result ? result.length : 0
+        resultSize: this.getResultSize(result),
+        streaming: useStreaming
       });
       
       // Record command for version control
@@ -528,6 +541,20 @@ export class DataTable {
       this.log.error('Failed to execute SQL:', error);
       throw error;
     }
+  }
+  
+  getResultSize(result) {
+    if (!result) return 0;
+    if (typeof result.length === 'number') return result.length;
+    if (typeof result.numRows === 'number') return result.numRows;
+    if (result.toArray) {
+      try {
+        return result.toArray().length;
+      } catch (e) {
+        return 'unknown';
+      }
+    }
+    return 'unknown';
   }
   
   getCurrentSQL() {
@@ -674,9 +701,69 @@ export class DataTable {
     }
   }
   
-  destroy() {
+  getOptimalDuckDBConfig() {
+    // Determine optimal memory configuration based on available memory
+    let maxMemory = '512MB'; // Default
+    
+    if (typeof performance !== 'undefined' && performance.memory) {
+      // Use browser memory information if available
+      const totalMemory = performance.memory.totalJSHeapSize;
+      const usedMemory = performance.memory.usedJSHeapSize;
+      const availableMemory = totalMemory - usedMemory;
+      
+      // Use 25% of available memory, with limits
+      const targetMemory = Math.floor(availableMemory * 0.25);
+      const memoryMB = Math.max(128, Math.min(1024, Math.floor(targetMemory / 1024 / 1024)));
+      maxMemory = `${memoryMB}MB`;
+      
+      this.log.debug(`Adaptive memory configuration: ${maxMemory} (available: ${Math.floor(availableMemory/1024/1024)}MB)`);
+    }
+    
+    return {
+      'max_memory': maxMemory,
+      'enable_object_cache': 'true',
+      'max_temp_directory_size': '128MB',
+      'enable_progress_bar': 'false' // Disable for better performance
+    };
+  }
+  
+  async cleanupConnection() {
+    try {
+      // Proper connection cleanup following DuckDB best practices
+      if (this.conn) {
+        this.log.debug('Closing DuckDB connection...');
+        await this.conn.close();
+        this.conn = null;
+      }
+    } catch (error) {
+      this.log.warn('Error closing connection:', error);
+    }
+  }
+  
+  async destroy() {
     try {
       this.log.info('Destroying DataTable...');
+      
+      // Cleanup UI first
+      if (this.tableRenderer) {
+        this.tableRenderer.destroy();
+        this.tableRenderer = null;
+      }
+      
+      // Cleanup connection
+      await this.cleanupConnection();
+      
+      // Cleanup DuckDB instance
+      if (this.db) {
+        try {
+          if (typeof this.db.terminate === 'function') {
+            await this.db.terminate();
+          }
+          this.db = null;
+        } catch (error) {
+          this.log.warn('Error terminating DuckDB:', error);
+        }
+      }
       
       // Cleanup worker
       if (this.worker) {
@@ -697,7 +784,6 @@ export class DataTable {
       // Clear references
       this.coordinator = null;
       this.connector = null;
-      this.tableRenderer = null;
       this.visualizations.clear();
       
       this.log.info('DataTable destroyed');

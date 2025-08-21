@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { WorkerConnector } from '../../src/connectors/WorkerConnector.js';
 
-describe('WorkerConnector', () => {
+// Note: WorkerConnector is a custom implementation available for special use cases
+// The current DataTable implementation uses Mosaic's wasmConnector directly for optimal performance
+describe('WorkerConnector (Custom Implementation)', () => {
   let workerConnector;
   let mockDataTable;
 
