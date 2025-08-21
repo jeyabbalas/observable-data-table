@@ -397,8 +397,59 @@ export class TableRenderer extends MosaicClient {
   destroy() {
     // Disconnect from coordinator if connected
     if (this.coordinator && this.connected) {
-      // Note: Mosaic coordinator doesn't have a disconnect method, 
-      // but we track our connection state
+      try {
+        // Clear any cached queries for this specific table
+        if (this.coordinator.cache && this.table) {
+          // Clear all cache entries that reference this table
+          if (typeof this.coordinator.cache.clear === 'function') {
+            // Clear entire cache to be safe - table name conflicts are dangerous
+            this.coordinator.cache.clear();
+            console.log(`TableRenderer.destroy(): Cleared coordinator cache for table ${this.table}`);
+          } else if (this.coordinator.cache instanceof Map) {
+            // Clear entire Map cache
+            this.coordinator.cache.clear();
+            console.log(`TableRenderer.destroy(): Cleared Map cache for table ${this.table}`);
+          } else if (this.coordinator.cache.delete) {
+            // Try to find and remove specific cache entries
+            const keysToDelete = [];
+            for (const [key] of this.coordinator.cache) {
+              const keyStr = String(key);
+              if (keyStr.includes && (keyStr.includes(this.table) || keyStr.includes(`FROM ${this.table}`))) {
+                keysToDelete.push(key);
+              }
+            }
+            keysToDelete.forEach(key => this.coordinator.cache.delete(key));
+            console.log(`TableRenderer.destroy(): Removed ${keysToDelete.length} cache entries for table ${this.table}`);
+          }
+        }
+        
+        // Clear query cache if it exists separately
+        if (this.coordinator.queryCache && this.table) {
+          if (typeof this.coordinator.queryCache.clear === 'function') {
+            this.coordinator.queryCache.clear();
+            console.log(`TableRenderer.destroy(): Cleared query cache for table ${this.table}`);
+          }
+        }
+        
+        // Remove this component from coordinator's clients
+        if (this.coordinator.clients) {
+          if (this.coordinator.clients.has && this.coordinator.clients.has(this)) {
+            this.coordinator.clients.delete(this);
+          } else if (this.coordinator.clients instanceof Set) {
+            this.coordinator.clients.delete(this);
+          } else if (Array.isArray(this.coordinator.clients)) {
+            const index = this.coordinator.clients.indexOf(this);
+            if (index > -1) {
+              this.coordinator.clients.splice(index, 1);
+            }
+          }
+          console.log(`TableRenderer.destroy(): Removed from coordinator clients for table ${this.table}`);
+        }
+        
+      } catch (error) {
+        console.warn('Error during coordinator cleanup:', error);
+      }
+      
       this.connected = false;
     }
     
@@ -407,10 +458,24 @@ export class TableRenderer extends MosaicClient {
       this.container.innerHTML = '';
     }
     
+    // Clear all data and state
+    this.data = [];
+    this.offset = 0;
+    
+    // Clear filters and ordering
+    if (this.filters && this.filters.value) {
+      this.filters.value = [];
+    }
+    if (this.orderBy && this.orderBy.value) {
+      this.orderBy.value = [];
+    }
+    
     // Clear references
     this.tableElement = null;
     this.thead = null;
     this.tbody = null;
-    this.data = [];
+    this.coordinator = null;
+    this.schema = null;
+    this.table = null;
   }
 }

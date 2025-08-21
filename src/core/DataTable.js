@@ -509,7 +509,7 @@ export class DataTable {
       this.updateProgress('Creating table renderer');
       
       // Ensure container is still in DOM (may have been removed by external code)
-      if (this.container && !document.contains(this.container)) {
+      if (this.container && typeof document !== 'undefined' && document.contains && !document.contains(this.container)) {
         this.container = null; // Clear stale reference
       }
       
@@ -525,6 +525,21 @@ export class DataTable {
           this.tableRenderer.destroy();
           this.tableRenderer = null;
         }
+        
+        // Clear coordinator cache before creating new renderer to prevent stale data
+        if (this.coordinator && this.coordinator.cache) {
+          try {
+            if (typeof this.coordinator.cache.clear === 'function') {
+              this.coordinator.cache.clear();
+              this.log.debug('Coordinator cache cleared before loading new data');
+            }
+          } catch (error) {
+            this.log.warn('Error clearing coordinator cache before loading:', error);
+          }
+        }
+        
+        // Small delay to ensure previous cleanup operations complete
+        await new Promise(resolve => setTimeout(resolve, 25));
         
         // Create new table renderer
         this.tableRenderer = new TableRenderer({
@@ -563,6 +578,34 @@ export class DataTable {
       });
       
       this.log.info(`Data loaded successfully: ${this.tableName.value}`);
+      
+      // Validate that the data was actually loaded correctly
+      try {
+        const sampleQuery = `SELECT * FROM ${this.tableName.value} LIMIT 3`;
+        let sampleData = await this.executeSQL(sampleQuery);
+        
+        // Handle Apache Arrow Table format (same as TableRenderer.queryResult())
+        if (sampleData && typeof sampleData === 'object' && !Array.isArray(sampleData) && typeof sampleData.toArray === 'function') {
+          this.log.debug('Converting Arrow Table for validation');
+          try {
+            sampleData = sampleData.toArray();
+          } catch (error) {
+            this.log.warn('Failed to convert Arrow Table for validation:', error);
+            sampleData = [];
+          }
+        }
+        
+        this.log.debug(`Sample data from new table ${this.tableName.value} (${sampleData?.length || 0} rows):`, sampleData);
+        
+        // Log first row for debugging
+        if (sampleData && sampleData.length > 0) {
+          this.log.debug('First row of new data:', sampleData[0]);
+        } else {
+          this.log.debug('Empty result from sample query (table may be empty or query failed)');
+        }
+      } catch (error) {
+        this.log.warn('Could not validate loaded data:', error.message);
+      }
       
       // Log data loading progress
       console.group('📊 Data Loading Complete');
@@ -642,9 +685,102 @@ export class DataTable {
     try {
       this.log.info('Clearing data...');
       
-      // Clear table
+      // Clear UI first - properly destroy table renderer before clearing data
+      if (this.tableRenderer) {
+        this.tableRenderer.destroy();
+        this.tableRenderer = null;
+      }
+      this.visualizations.clear();
+      
+      // Restore empty state in container after clearing renderer
+      if (this.container && this.container.parentElement) {
+        this.container.parentElement.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📊</div>
+            <h3>No Data Loaded</h3>
+            <p>Upload a file or load data from a URL to get started</p>
+          </div>
+        `;
+        this.container = null; // Clear reference since container is gone
+      }
+      
+      // Clear coordinator cache to prevent stale data references
+      if (this.coordinator) {
+        try {
+          // Clear main cache
+          if (this.coordinator.cache) {
+            if (typeof this.coordinator.cache.clear === 'function') {
+              this.coordinator.cache.clear();
+              this.log.debug('Coordinator cache cleared');
+            } else if (this.coordinator.cache instanceof Map) {
+              this.coordinator.cache.clear();
+              this.log.debug('Coordinator Map cache cleared');
+            }
+          }
+          
+          // Clear query cache if it exists separately
+          if (this.coordinator.queryCache && typeof this.coordinator.queryCache.clear === 'function') {
+            this.coordinator.queryCache.clear();
+            this.log.debug('Coordinator query cache cleared');
+          }
+          
+          // Clear client-specific caches
+          if (this.coordinator.clients) {
+            this.coordinator.clients.forEach(client => {
+              if (client && typeof client.clearCache === 'function') {
+                client.clearCache();
+              }
+            });
+          }
+          
+          // Force invalidate all cached queries by incrementing version if available
+          if (this.coordinator.version !== undefined) {
+            this.coordinator.version++;
+            this.log.debug('Coordinator version incremented to force cache invalidation');
+          }
+          
+        } catch (error) {
+          this.log.warn('Error clearing coordinator cache:', error);
+        }
+      }
+      
+      // Clear table from database
       if (this.tableName.value) {
+        this.log.info(`Dropping table: ${this.tableName.value}`);
         await this.executeSQL(`DROP TABLE IF EXISTS ${this.tableName.value}`);
+        
+        // Verify table was actually dropped
+        try {
+          let tables = await this.executeSQL("SHOW TABLES");
+          
+          // Handle Apache Arrow format if needed
+          if (tables && typeof tables === 'object' && !Array.isArray(tables) && typeof tables.toArray === 'function') {
+            try {
+              tables = tables.toArray();
+            } catch (error) {
+              this.log.warn('Failed to convert Arrow Table for table verification:', error);
+              tables = [];
+            }
+          }
+          
+          // Extract table names from the result
+          const remainingTables = Array.isArray(tables) ? 
+            tables.map(row => typeof row === 'string' ? row : (row.name || row.table_name || Object.values(row)[0])) :
+            [];
+          
+          this.log.debug('Remaining tables after DROP:', remainingTables);
+          
+          if (remainingTables.includes(this.tableName.value)) {
+            this.log.warn(`Table ${this.tableName.value} still exists after DROP command`);
+          } else {
+            this.log.debug(`Table ${this.tableName.value} successfully dropped`);
+          }
+        } catch (error) {
+          this.log.debug('Could not verify table drop (this is normal):', error.message);
+        }
+        
+        // Add a small delay to ensure DuckDB completes the operation
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       // Reset state
@@ -662,13 +798,6 @@ export class DataTable {
       if (this.versionControl) {
         await this.versionControl.clear();
       }
-      
-      // Clear UI - properly destroy table renderer instead of clearing container
-      if (this.tableRenderer) {
-        this.tableRenderer.destroy();
-        this.tableRenderer = null;
-      }
-      this.visualizations.clear();
       
       this.log.info('Data cleared successfully');
     } catch (error) {

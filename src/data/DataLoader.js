@@ -12,6 +12,22 @@ export class DataLoader {
     ]);
   }
   
+  generateUniqueTableName(baseFileName = 'data') {
+    // Generate a unique table name using timestamp and random suffix
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    
+    // Clean filename for SQL safety
+    const cleanName = baseFileName
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/^[0-9]/, 'table_$&')
+      .substring(0, 20);
+    
+    const tableName = `${cleanName}_${timestamp}_${randomSuffix}`;
+    this.dataTable.log.debug(`Generated unique table name: ${tableName}`);
+    return tableName;
+  }
+  
   async load(source, options = {}) {
     // Detect source type
     if (source instanceof File) {
@@ -57,7 +73,10 @@ export class DataLoader {
   }
   
   async loadCSV(data, options = {}) {
-    const tableName = options.tableName || 'data';
+    const baseFileName = options.filename ? 
+      options.filename.replace(/\.[^/.]+$/, '') : // Remove extension
+      'data';
+    const tableName = options.tableName || this.generateUniqueTableName(baseFileName);
     const delimiter = options.delimiter || ',';
     
     this.dataTable.log.info(`Loading CSV data into table: ${tableName}`);
@@ -105,7 +124,10 @@ export class DataLoader {
   }
   
   async loadJSON(data, options = {}) {
-    const tableName = options.tableName || 'data';
+    const baseFileName = options.filename ? 
+      options.filename.replace(/\.[^/.]+$/, '') : // Remove extension
+      'data';
+    const tableName = options.tableName || this.generateUniqueTableName(baseFileName);
     
     this.dataTable.log.info(`Loading JSON data into table: ${tableName}`);
     
@@ -148,7 +170,10 @@ export class DataLoader {
   }
   
   async loadParquet(data, options = {}) {
-    const tableName = options.tableName || 'data';
+    const baseFileName = options.filename ? 
+      options.filename.replace(/\.[^/.]+$/, '') : // Remove extension
+      'data';
+    const tableName = options.tableName || this.generateUniqueTableName(baseFileName);
     
     this.dataTable.log.info(`Loading Parquet data into table: ${tableName}`);
     

@@ -221,8 +221,8 @@ class DataTableApp {
       
       await this.dataTable.clearData();
       
-      // Reset UI
-      this.resetDataLoadedState();
+      // Reset UI state but don't interfere with DataTable's container management
+      this.resetDataLoadedStateWithoutContainer();
       
       this.hideLoading();
       this.showNotification('Data cleared successfully', 'success');
@@ -362,6 +362,26 @@ class DataTableApp {
         <p>Upload a file or load data from a URL to get started</p>
       </div>
     `;
+  }
+  
+  resetDataLoadedStateWithoutContainer() {
+    // Disable controls
+    document.getElementById('clearData').disabled = true;
+    document.getElementById('exportData').disabled = true;
+    document.getElementById('copySql').disabled = true;
+    document.getElementById('executeSql').disabled = true;
+    
+    // Clear file name
+    document.getElementById('fileName').textContent = '';
+    document.getElementById('urlInput').value = '';
+    
+    // Reset counts
+    this.updateRowColumnCount(0, 0);
+    
+    // Update status
+    this.updateStatus('Ready');
+    
+    // Don't touch the table container - let DataTable manage it
   }
   
   updateStatus(text) {
