@@ -43,7 +43,6 @@ export class TableRenderer extends MosaicClient {
       // manually fetch and display initial data
       setTimeout(async () => {
         if (this.data.length === 0) {
-          console.log('No data received via coordinator, attempting direct query...');
           await this.fallbackDataLoad();
         }
       }, 1000); // Wait 1 second for coordinator to respond
@@ -96,23 +95,16 @@ export class TableRenderer extends MosaicClient {
       .limit(this.limit)
       .offset(this.offset);
     
-    console.log('TableRenderer.query() generated:', query.toString());
-    console.log('OrderBy expressions:', orderByExprs);
-    console.log('Current orderBy value:', this.orderBy.value);
     return query;
   }
   
   queryResult(data) {
-    console.log('TableRenderer.queryResult() called with data:', data);
-    console.log('Data type:', typeof data, 'Array?', Array.isArray(data), 'Length:', data?.length);
     
     // Handle Apache Arrow Table format from Mosaic wasmConnector
     // Arrow tables have a toArray() method to convert to JavaScript arrays
     if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.toArray === 'function') {
-      console.log('Converting Apache Arrow Table to JavaScript array');
       try {
         data = data.toArray();
-        console.log('Arrow conversion successful, new length:', data.length);
       } catch (error) {
         console.error('Failed to convert Arrow Table to array:', error);
         // Fall back to empty array if conversion fails
@@ -125,7 +117,6 @@ export class TableRenderer extends MosaicClient {
   }
 
   queryPending() {
-    console.log('Query pending for table:', this.table);
     // Could add loading indicator here if needed
   }
 
@@ -133,7 +124,6 @@ export class TableRenderer extends MosaicClient {
     console.error('Query error for table:', this.table, error);
     // Try to recover or show error to user
     if (this.fallbackDataLoad) {
-      console.log('Attempting fallback data load due to query error');
       this.fallbackDataLoad();
     }
   }
@@ -291,8 +281,7 @@ export class TableRenderer extends MosaicClient {
     }
     
     try {
-      console.log('Requesting data for table:', this.table);
-      // FIXED: Use the MosaicClient's requestQuery method which handles everything correctly
+        // FIXED: Use the MosaicClient's requestQuery method which handles everything correctly
       this.requestQuery();
     } catch (error) {
       console.error('Failed to request data:', error);
@@ -355,21 +344,17 @@ export class TableRenderer extends MosaicClient {
   
   async fallbackDataLoad() {
     try {
-      console.log('Attempting fallback data load for table:', this.table);
       
       // Try direct DuckDB query first (most reliable)
       if (this.connection) {
-        console.log('Using direct DuckDB connection for fallback query');
         
         // Build SQL query without quotes around table name
         const sql = `SELECT * FROM ${this.table} LIMIT ${this.limit} OFFSET ${this.offset}`;
-        console.log('Executing SQL directly:', sql);
         
         const result = await this.connection.query(sql);
         const data = result.toArray();
         
         if (data && data.length > 0) {
-          console.log('Fallback data load successful via direct DuckDB, received', data.length, 'rows');
           this.queryResult(data);
           return;
         }
@@ -377,12 +362,10 @@ export class TableRenderer extends MosaicClient {
       
       // Fallback to coordinator query if direct connection failed
       if (this.coordinator && this.coordinator.query) {
-        console.log('Trying coordinator query as secondary fallback');
         const query = this.query(); // Get our query
         const result = await this.coordinator.query(query);
         
         if (result && result.length > 0) {
-          console.log('Fallback data load successful via coordinator, received', result.length, 'rows');
           this.queryResult(result);
           return;
         }
@@ -404,11 +387,9 @@ export class TableRenderer extends MosaicClient {
           if (typeof this.coordinator.cache.clear === 'function') {
             // Clear entire cache to be safe - table name conflicts are dangerous
             this.coordinator.cache.clear();
-            console.log(`TableRenderer.destroy(): Cleared coordinator cache for table ${this.table}`);
           } else if (this.coordinator.cache instanceof Map) {
             // Clear entire Map cache
             this.coordinator.cache.clear();
-            console.log(`TableRenderer.destroy(): Cleared Map cache for table ${this.table}`);
           } else if (this.coordinator.cache.delete) {
             // Try to find and remove specific cache entries
             const keysToDelete = [];
@@ -419,7 +400,6 @@ export class TableRenderer extends MosaicClient {
               }
             }
             keysToDelete.forEach(key => this.coordinator.cache.delete(key));
-            console.log(`TableRenderer.destroy(): Removed ${keysToDelete.length} cache entries for table ${this.table}`);
           }
         }
         
@@ -427,7 +407,6 @@ export class TableRenderer extends MosaicClient {
         if (this.coordinator.queryCache && this.table) {
           if (typeof this.coordinator.queryCache.clear === 'function') {
             this.coordinator.queryCache.clear();
-            console.log(`TableRenderer.destroy(): Cleared query cache for table ${this.table}`);
           }
         }
         
@@ -443,7 +422,6 @@ export class TableRenderer extends MosaicClient {
               this.coordinator.clients.splice(index, 1);
             }
           }
-          console.log(`TableRenderer.destroy(): Removed from coordinator clients for table ${this.table}`);
         }
         
       } catch (error) {

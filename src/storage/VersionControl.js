@@ -27,7 +27,6 @@ export class VersionControl {
     this.currentIndex++;
     
     // TODO: Store in IndexedDB
-    console.log('Recorded command:', command);
     
     return command.id;
   }
@@ -35,14 +34,12 @@ export class VersionControl {
   async undo() {
     if (this.currentIndex > 0) {
       this.currentIndex--;
-      console.log('Undo to index:', this.currentIndex);
     }
   }
   
   async redo() {
     if (this.currentIndex < this.commands.length - 1) {
       this.currentIndex++;
-      console.log('Redo to index:', this.currentIndex);
     }
   }
   
@@ -50,6 +47,5 @@ export class VersionControl {
     this.commands = [];
     this.snapshots = [];
     this.currentIndex = -1;
-    console.log('Version control cleared');
   }
 }

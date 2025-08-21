@@ -18,30 +18,30 @@ export class WorkerConnector {
     const { type, sql } = request;
     
     try {
-      // Validate that DataTable and worker are available
+      // Validate that DataTable and connection are available
       if (!this.dataTable) {
         throw new Error('DataTable not available in WorkerConnector');
       }
       
-      if (!this.dataTable.worker) {
-        throw new Error('Worker not initialized - cannot execute query');
+      // Use the DuckDB connection (works in both worker and direct mode)
+      if (!this.dataTable.conn) {
+        throw new Error('DuckDB connection not available');
       }
       
       if (type === 'exec') {
         // Execute query without expecting results
-        await this.dataTable.sendToWorker('exec', { sql });
+        await this.dataTable.conn.query(sql);
         return undefined;
       } else {
         // Execute query and return results
-        const result = await this.dataTable.sendToWorker('exec', { sql });
+        const result = await this.dataTable.conn.query(sql);
         
         if (type === 'arrow') {
-          // For arrow format, we would need to handle Arrow IPC
-          // For now, return JSON format which is more compatible
+          // Return Arrow format directly
           return result;
         } else {
-          // JSON format (default)
-          return result;
+          // JSON format (default) - convert Arrow to array
+          return result.toArray();
         }
       }
     } catch (error) {

@@ -6,6 +6,6 @@ export class ValueCounts {
   
   async initialize() {
     // TODO: Implement value counts visualization
-    console.log('ValueCounts visualization - Coming soon!');
+    // ValueCounts visualization implementation pending for Phase 2
   }
 }

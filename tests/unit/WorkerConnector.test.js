@@ -7,7 +7,9 @@ describe('WorkerConnector', () => {
 
   beforeEach(() => {
     mockDataTable = {
-      sendToWorker: vi.fn()
+      conn: {
+        query: vi.fn()
+      }
     };
     workerConnector = new WorkerConnector(mockDataTable);
   });
@@ -29,13 +31,11 @@ describe('WorkerConnector', () => {
         sql: 'CREATE TABLE test AS SELECT 1'
       };
 
-      mockDataTable.sendToWorker.mockResolvedValue(undefined);
+      mockDataTable.conn.query.mockResolvedValue(undefined);
 
       const result = await workerConnector.query(queryRequest);
 
-      expect(mockDataTable.sendToWorker).toHaveBeenCalledWith('exec', {
-        sql: 'CREATE TABLE test AS SELECT 1'
-      });
+      expect(mockDataTable.conn.query).toHaveBeenCalledWith('CREATE TABLE test AS SELECT 1');
       expect(result).toBeUndefined();
     });
 
@@ -50,35 +50,36 @@ describe('WorkerConnector', () => {
         { id: 2, name: 'Bob' }
       ];
 
-      mockDataTable.sendToWorker.mockResolvedValue(mockResults);
+      const mockQueryResult = {
+        toArray: vi.fn().mockReturnValue(mockResults)
+      };
+
+      mockDataTable.conn.query.mockResolvedValue(mockQueryResult);
 
       const result = await workerConnector.query(queryRequest);
 
-      expect(mockDataTable.sendToWorker).toHaveBeenCalledWith('exec', {
-        sql: 'SELECT * FROM test LIMIT 5'
-      });
+      expect(mockDataTable.conn.query).toHaveBeenCalledWith('SELECT * FROM test LIMIT 5');
       expect(result).toEqual(mockResults);
     });
 
-    it('should handle arrow type queries (returns json for now)', async () => {
+    it('should handle arrow type queries (returns arrow result directly)', async () => {
       const queryRequest = {
         type: 'arrow',
         sql: 'SELECT * FROM test LIMIT 5'
       };
 
-      const mockResults = [
-        { id: 1, name: 'Alice' },
-        { id: 2, name: 'Bob' }
-      ];
+      const mockArrowResult = {
+        // Arrow result object (not converted to array)
+        _columns: ['id', 'name'],
+        _length: 2
+      };
 
-      mockDataTable.sendToWorker.mockResolvedValue(mockResults);
+      mockDataTable.conn.query.mockResolvedValue(mockArrowResult);
 
       const result = await workerConnector.query(queryRequest);
 
-      expect(mockDataTable.sendToWorker).toHaveBeenCalledWith('exec', {
-        sql: 'SELECT * FROM test LIMIT 5'
-      });
-      expect(result).toEqual(mockResults);
+      expect(mockDataTable.conn.query).toHaveBeenCalledWith('SELECT * FROM test LIMIT 5');
+      expect(result).toEqual(mockArrowResult);
     });
 
     it('should handle complex SQL queries', async () => {
@@ -99,13 +100,14 @@ describe('WorkerConnector', () => {
         sql: complexSQL
       };
 
-      mockDataTable.sendToWorker.mockResolvedValue([]);
+      const mockQueryResult = {
+        toArray: vi.fn().mockReturnValue([])
+      };
+      mockDataTable.conn.query.mockResolvedValue(mockQueryResult);
 
       await workerConnector.query(queryRequest);
 
-      expect(mockDataTable.sendToWorker).toHaveBeenCalledWith('exec', {
-        sql: complexSQL
-      });
+      expect(mockDataTable.conn.query).toHaveBeenCalledWith(complexSQL);
     });
 
     it('should propagate worker errors', async () => {
@@ -115,13 +117,11 @@ describe('WorkerConnector', () => {
       };
 
       const workerError = new Error('Table does not exist');
-      mockDataTable.sendToWorker.mockRejectedValue(workerError);
+      mockDataTable.conn.query.mockRejectedValue(workerError);
 
-      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Table does not exist');
+      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Worker query failed: Table does not exist');
 
-      expect(mockDataTable.sendToWorker).toHaveBeenCalledWith('exec', {
-        sql: 'SELECT * FROM nonexistent_table'
-      });
+      expect(mockDataTable.conn.query).toHaveBeenCalledWith('SELECT * FROM nonexistent_table');
     });
 
     it('should handle worker timeout errors', async () => {
@@ -131,11 +131,11 @@ describe('WorkerConnector', () => {
       };
 
       const timeoutError = new Error('Worker operation timeout');
-      mockDataTable.sendToWorker.mockRejectedValue(timeoutError);
+      mockDataTable.conn.query.mockRejectedValue(timeoutError);
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Worker operation timeout');
+      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Worker query failed: Worker operation timeout');
 
       expect(consoleSpy).toHaveBeenCalledWith('WorkerConnector query failed:', timeoutError);
       
@@ -150,14 +150,15 @@ describe('WorkerConnector', () => {
         priority: 1
       };
 
-      mockDataTable.sendToWorker.mockResolvedValue([]);
+      const mockQueryResult = {
+        toArray: vi.fn().mockReturnValue([])
+      };
+      mockDataTable.conn.query.mockResolvedValue(mockQueryResult);
 
       await workerConnector.query(queryRequest);
 
-      // Should still only pass sql to worker (options are handled by coordinator)
-      expect(mockDataTable.sendToWorker).toHaveBeenCalledWith('exec', {
-        sql: 'SELECT * FROM test'
-      });
+      // Should still only pass sql to connection (options are handled by coordinator)
+      expect(mockDataTable.conn.query).toHaveBeenCalledWith('SELECT * FROM test');
     });
   });
 
@@ -192,10 +193,14 @@ describe('WorkerConnector', () => {
         sql: 'SELECT * FROM data LIMIT 100 OFFSET 0'
       };
 
-      mockDataTable.sendToWorker.mockResolvedValue([
+      const mockResults = [
         { name: 'Alice', age: 30 },
         { name: 'Bob', age: 25 }
-      ]);
+      ];
+      const mockQueryResult = {
+        toArray: vi.fn().mockReturnValue(mockResults)
+      };
+      mockDataTable.conn.query.mockResolvedValue(mockQueryResult);
 
       const result = await workerConnector.query(mosaicQueryRequest);
 
@@ -211,9 +216,12 @@ describe('WorkerConnector', () => {
         sql: 'SELECT * FROM data WHERE name = \'Alice\' ORDER BY age ASC LIMIT 100 OFFSET 0'
       };
 
-      mockDataTable.sendToWorker.mockResolvedValue([
-        { name: 'Alice', age: 30 }
-      ]);
+      const mockQueryResult = {
+        toArray: vi.fn().mockReturnValue([
+          { name: 'Alice', age: 30 }
+        ])
+      };
+      mockDataTable.conn.query.mockResolvedValue(mockQueryResult);
 
       const result = await workerConnector.query(mosaicQueryRequest);
 
@@ -229,9 +237,9 @@ describe('WorkerConnector', () => {
         sql: null
       };
 
-      mockDataTable.sendToWorker.mockRejectedValue(new Error('Invalid SQL'));
+      mockDataTable.conn.query.mockRejectedValue(new Error('Invalid SQL'));
 
-      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Invalid SQL');
+      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Worker query failed: Invalid SQL');
     });
 
     it('should handle malformed query requests', async () => {
@@ -239,9 +247,9 @@ describe('WorkerConnector', () => {
         // Missing type and sql
       };
 
-      mockDataTable.sendToWorker.mockRejectedValue(new Error('Missing required parameters'));
+      mockDataTable.conn.query.mockRejectedValue(new Error('Missing required parameters'));
 
-      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Missing required parameters');
+      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Worker query failed: Missing required parameters');
     });
 
     it('should handle worker not being initialized', async () => {
@@ -251,9 +259,9 @@ describe('WorkerConnector', () => {
       };
 
       const workerError = new Error('Worker not initialized');
-      mockDataTable.sendToWorker.mockRejectedValue(workerError);
+      mockDataTable.conn.query.mockRejectedValue(workerError);
 
-      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Worker not initialized');
+      await expect(workerConnector.query(queryRequest)).rejects.toThrow('Worker query failed: Worker not initialized');
     });
   });
 });

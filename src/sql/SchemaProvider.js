@@ -6,7 +6,7 @@ export class SchemaProvider {
   
   getSchema() {
     // TODO: Implement schema extraction for autocomplete
-    console.log('SchemaProvider - Coming soon!');
+    // Schema extraction implementation pending for Phase 2
     return { tables: [], columns: [] };
   }
 }

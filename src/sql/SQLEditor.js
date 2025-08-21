@@ -6,6 +6,6 @@ export class SQLEditor {
   
   initialize() {
     // TODO: Implement CodeMirror SQL editor
-    console.log('SQLEditor - Coming soon!');
+    // CodeMirror SQL editor implementation pending for Phase 2
   }
 }

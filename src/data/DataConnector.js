@@ -6,6 +6,6 @@ export class DataConnector {
   
   async connect() {
     // TODO: Implement DuckDB connection management
-    console.log('DataConnector - Coming soon!');
+    // DuckDB connection management implementation pending for Phase 2
   }
 }

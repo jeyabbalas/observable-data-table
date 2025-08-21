@@ -6,6 +6,6 @@ export class DateHistogram {
   
   async initialize() {
     // TODO: Implement date histogram visualization
-    console.log('DateHistogram visualization - Coming soon!');
+    // DateHistogram visualization implementation pending for Phase 2
   }
 }

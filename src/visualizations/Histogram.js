@@ -6,6 +6,6 @@ export class Histogram {
   
   async initialize() {
     // TODO: Implement histogram visualization
-    console.log('Histogram visualization - Coming soon!');
+    // Histogram visualization implementation pending for Phase 2
   }
 }

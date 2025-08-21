@@ -6,6 +6,6 @@ export class QueryBuilder {
   
   build() {
     // TODO: Implement SQL query building from interactions
-    console.log('QueryBuilder - Coming soon!');
+    // SQL query building implementation pending for Phase 2
   }
 }

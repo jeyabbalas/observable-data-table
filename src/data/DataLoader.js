@@ -219,19 +219,19 @@ export class DataLoader {
   
   async loadURL(url, options = {}) {
     // TODO: Implement URL loading
-    console.log('URL loading - Coming soon!');
+    // URL loading implementation pending for Phase 2
     return { tableName: 'data', schema: {} };
   }
   
   async loadRawData(data, options = {}) {
     // TODO: Implement raw data loading
-    console.log('Raw data loading - Coming soon!');
+    // Raw data loading implementation pending for Phase 2
     return { tableName: 'data', schema: {} };
   }
   
   async loadArrayBuffer(buffer, options = {}) {
     // TODO: Implement ArrayBuffer loading
-    console.log('ArrayBuffer loading - Coming soon!');
+    // ArrayBuffer loading implementation pending for Phase 2
     return { tableName: 'data', schema: {} };
   }
   

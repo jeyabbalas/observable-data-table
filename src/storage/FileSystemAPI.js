@@ -6,11 +6,11 @@ export class FileSystemAPI {
   
   async saveFile(data, filename) {
     // TODO: Implement File System Access API
-    console.log('FileSystemAPI save - Coming soon!');
+    // FileSystemAPI save implementation pending for Phase 2
   }
   
   async loadFile() {
     // TODO: Implement File System Access API
-    console.log('FileSystemAPI load - Coming soon!');
+    // FileSystemAPI load implementation pending for Phase 2
   }
 }
