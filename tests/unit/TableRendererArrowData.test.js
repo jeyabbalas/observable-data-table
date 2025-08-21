@@ -295,8 +295,10 @@ describe('TableRenderer Arrow Data Handling', () => {
 
       await tableRenderer.initialize();
 
-      // Wait for the timeout in initialize
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Use fake timers for immediate resolution
+      vi.useFakeTimers();
+      vi.advanceTimersByTime(200);
+      vi.useRealTimers();
 
       // Should have received data and not called fallback
       expect(renderRowsSpy).toHaveBeenCalledWith(sampleData);

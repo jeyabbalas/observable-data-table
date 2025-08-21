@@ -128,7 +128,7 @@ describe('AsyncDuckDB Worker Mode Tests', () => {
       });
       
       await dataTable.initialize();
-      dataTable.destroy();
+      await dataTable.destroy();
       
       expect(mockWorker.terminate).toHaveBeenCalled();
     });

@@ -98,9 +98,9 @@ describe('Mosaic Connector Integration - Direct Mode', () => {
     global.Blob = vi.fn().mockImplementation(() => ({}));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (dataTable) {
-      dataTable.destroy();
+      await dataTable.destroy();
     }
     if (mockContainer.parentNode) {
       mockContainer.parentNode.removeChild(mockContainer);

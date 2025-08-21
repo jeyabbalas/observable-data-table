@@ -64,10 +64,10 @@ describe('DataTable', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Cleanup
     if (dataTable) {
-      dataTable.destroy();
+      await dataTable.destroy();
     }
     if (container.parentNode) {
       container.parentNode.removeChild(container);
@@ -329,7 +329,7 @@ describe('DataTable', () => {
       };
       dataTable.persistenceManager = mockPersistenceManager;
       
-      dataTable.destroy();
+      await dataTable.destroy();
       
       if (mockWorker) {
         expect(mockWorker.terminate).toHaveBeenCalled();

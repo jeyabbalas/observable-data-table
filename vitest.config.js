@@ -5,7 +5,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./tests/setup.js']
+    setupFiles: ['./tests/setup.js'],
+    testTimeout: 10000, // 10 second timeout to prevent hanging
+    pool: 'forks', // Prevent test interference
+    isolate: true // Ensure test isolation
   },
   resolve: {
     alias: {

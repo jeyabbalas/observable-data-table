@@ -38,10 +38,11 @@ const mockIDBDatabase = {
 global.indexedDB = {
   open: vi.fn(() => {
     const request = { ...mockIDBRequest };
-    setTimeout(() => {
+    // Use setImmediate for immediate resolution to prevent hanging
+    setImmediate(() => {
       request.result = mockIDBDatabase;
       if (request.onsuccess) request.onsuccess({ target: request });
-    }, 0);
+    });
     return request;
   })
 };
@@ -98,21 +99,23 @@ global.FileReader = class FileReader {
   }
 
   readAsArrayBuffer(file) {
-    setTimeout(() => {
+    // Use setImmediate for immediate resolution to prevent hanging
+    setImmediate(() => {
       this.result = new ArrayBuffer(8);
       this.readyState = 2;
       if (this.onload) this.onload({ target: this });
       if (this.onloadend) this.onloadend({ target: this });
-    }, 0);
+    });
   }
 
   readAsText(file) {
-    setTimeout(() => {
+    // Use setImmediate for immediate resolution to prevent hanging
+    setImmediate(() => {
       this.result = 'mock file content';
       this.readyState = 2;
       if (this.onload) this.onload({ target: this });
       if (this.onloadend) this.onloadend({ target: this });
-    }, 0);
+    });
   }
 };
 

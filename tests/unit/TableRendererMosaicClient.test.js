@@ -320,47 +320,56 @@ describe('TableRenderer as MosaicClient', () => {
       
       await tableRenderer.initialize();
       
-      // Wait for query to complete (50ms) but less than fallback timeout (1000ms)
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Use fake timers for immediate resolution
+      vi.useFakeTimers();
+      vi.advanceTimersByTime(200);
+      vi.useRealTimers();
 
       // Fallback should NOT be triggered when coordinator responds quickly
       expect(fallbackSpy).not.toHaveBeenCalled();
     });
 
     it('should trigger fallback only when coordinator fails to respond', async () => {
-      // Create a coordinator that doesn't respond
-      const slowCoordinator = {
-        connect: vi.fn().mockImplementation((client) => {
-          client.coordinator = this;
-          client.initialize();
-        }),
-        requestQuery: vi.fn().mockImplementation(() => {
-          // Never resolve - simulate coordinator not responding
-          return new Promise(() => {});
-        })
-      };
-
-      tableRenderer = new TableRenderer({
-        table: 'test_table',
-        schema: { name: { type: 'string' } },
-        container,
-        coordinator: slowCoordinator,
-        connection: {
-          query: vi.fn().mockResolvedValue({
-            toArray: vi.fn().mockReturnValue([{ name: 'Alice' }])
+      // Use fake timers to avoid real delays
+      vi.useFakeTimers();
+      
+      try {
+        // Create a coordinator that doesn't respond
+        const slowCoordinator = {
+          connect: vi.fn().mockImplementation((client) => {
+            client.coordinator = this;
+            client.initialize();
+          }),
+          requestQuery: vi.fn().mockImplementation(() => {
+            // Never resolve - simulate coordinator not responding
+            return new Promise(() => {});
           })
-        }
-      });
+        };
 
-      const fallbackSpy = vi.spyOn(tableRenderer, 'fallbackDataLoad');
-      
-      await tableRenderer.initialize();
-      
-      // Wait for fallback timeout (1000ms)
-      await new Promise(resolve => setTimeout(resolve, 1100));
+        tableRenderer = new TableRenderer({
+          table: 'test_table',
+          schema: { name: { type: 'string' } },
+          container,
+          coordinator: slowCoordinator,
+          connection: {
+            query: vi.fn().mockResolvedValue({
+              toArray: vi.fn().mockReturnValue([{ name: 'Alice' }])
+            })
+          }
+        });
 
-      // Fallback should be triggered when coordinator doesn't respond
-      expect(fallbackSpy).toHaveBeenCalled();
+        const fallbackSpy = vi.spyOn(tableRenderer, 'fallbackDataLoad');
+        
+        await tableRenderer.initialize();
+        
+        // Fast forward timers instead of real wait
+        vi.advanceTimersByTime(1100);
+
+        // Fallback should be triggered when coordinator doesn't respond
+        expect(fallbackSpy).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
