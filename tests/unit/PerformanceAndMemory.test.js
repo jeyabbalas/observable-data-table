@@ -14,9 +14,11 @@ const mockDb = {
       }
       return { toArray: () => [] };
     }),
-    close: vi.fn(async () => {})
+    close: vi.fn(async () => {}),
+    send: vi.fn(async () => ({ toArray: () => [] }))
   })),
-  terminate: vi.fn(async () => {})
+  terminate: vi.fn(async () => {}),
+  registerFileText: vi.fn(async () => {})
 };
 
 vi.mock('@duckdb/duckdb-wasm', () => ({
@@ -34,8 +36,22 @@ vi.mock('@duckdb/duckdb-wasm', () => ({
 
 vi.mock('@uwdata/mosaic-core', () => ({
   Coordinator: vi.fn(() => ({
-    databaseConnector: vi.fn()
+    databaseConnector: vi.fn(),
+    connect: vi.fn(),
+    cache: new Map()
   })),
+  MosaicClient: vi.fn().mockImplementation(function() {
+    this.requestQuery = vi.fn(async () => ({ toArray: () => [] }));
+    this.coordinator = null;
+    this.createTable = vi.fn();
+    this.filterBy = vi.fn();
+    this.initialize = vi.fn();
+    return this;
+  }),
+  Selection: {
+    crossfilter: vi.fn(() => ({})),
+    column: vi.fn(() => ({}))
+  },
   wasmConnector: vi.fn(() => ({
     query: vi.fn(async () => ({ toArray: () => [] }))
   }))
@@ -62,6 +78,16 @@ describe('Performance and Memory Management', () => {
     };
     global.Blob = vi.fn();
     
+    // Setup performance.memory mock
+    global.performance = {
+      memory: {
+        totalJSHeapSize: 1024 * 1024 * 1024, // 1GB
+        usedJSHeapSize: 256 * 1024 * 1024,   // 256MB
+        jsHeapSizeLimit: 2048 * 1024 * 1024  // 2GB
+      },
+      now: vi.fn(() => Date.now())
+    };
+    
     vi.clearAllMocks();
   });
   
@@ -73,12 +99,13 @@ describe('Performance and Memory Management', () => {
 
   describe('Memory Configuration', () => {
     it('should use adaptive memory configuration when performance.memory is available', async () => {
-      // Mock performance.memory
+      // Mock performance.memory - 2GB total, 512MB used = 1536MB available, 25% = 384MB
       global.performance = {
         memory: {
           totalJSHeapSize: 2 * 1024 * 1024 * 1024, // 2GB
           usedJSHeapSize: 512 * 1024 * 1024,      // 512MB
-        }
+        },
+        now: vi.fn(() => Date.now())
       };
       
       const dataTable = new DataTable({
@@ -90,16 +117,20 @@ describe('Performance and Memory Management', () => {
       
       const config = dataTable.getOptimalDuckDBConfig();
       
-      // Should calculate 25% of available memory (1.5GB * 0.25 = ~375MB)
-      expect(config.max_memory).toMatch(/\d+MB/);
+      // Should calculate 25% of available memory (1536MB * 0.25 = 384MB)
+      // Temp directory should be 25% of max memory (384MB * 0.25 = 96MB)
+      expect(config.max_memory).toBe('384MB');
       expect(config.enable_object_cache).toBe('true');
-      expect(config.max_temp_directory_size).toBe('128MB');
+      expect(config.max_temp_directory_size).toBe('96MB');
       
       // Cleanup
       global.performance = undefined;
     });
 
     it('should use default memory configuration when performance.memory is not available', async () => {
+      // Remove performance.memory mock to test default behavior
+      global.performance = { now: vi.fn(() => Date.now()) };
+      
       const dataTable = new DataTable({
         container,
         useWorker: false

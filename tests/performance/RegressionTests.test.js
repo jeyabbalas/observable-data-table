@@ -73,6 +73,18 @@ vi.mock('@uwdata/mosaic-core', () => ({
     connect: vi.fn(),
     cache: new Map()
   })),
+  MosaicClient: vi.fn().mockImplementation(function() {
+    this.requestQuery = vi.fn(async () => ({ toArray: () => [] }));
+    this.coordinator = null;
+    this.createTable = vi.fn();
+    this.filterBy = vi.fn();
+    this.initialize = vi.fn();
+    return this;
+  }),
+  Selection: {
+    crossfilter: vi.fn(() => ({})),
+    column: vi.fn(() => ({}))
+  },
   wasmConnector: vi.fn(() => ({
     query: vi.fn(async () => ({ toArray: () => [] }))
   }))
