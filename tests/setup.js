@@ -50,6 +50,8 @@ global.indexedDB = {
 global.Worker = vi.fn(() => ({
   postMessage: vi.fn(),
   terminate: vi.fn(),
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
   onmessage: null,
   onerror: null
 }));
@@ -64,6 +66,23 @@ global.File = class File extends Blob {
     this.name = fileName;
     this.lastModified = Date.now();
     this.webkitRelativePath = '';
+    this._fileBits = fileBits; // Store fileBits for arrayBuffer method
+  }
+  
+  async arrayBuffer() {
+    // Convert the file bits to ArrayBuffer
+    if (this._fileBits && this._fileBits.length > 0) {
+      const firstBit = this._fileBits[0];
+      if (firstBit instanceof ArrayBuffer) {
+        return firstBit;
+      } else if (firstBit instanceof Uint8Array) {
+        return firstBit.buffer;
+      } else if (typeof firstBit === 'string') {
+        return new TextEncoder().encode(firstBit).buffer;
+      }
+    }
+    // Fallback: create a new ArrayBuffer
+    return new ArrayBuffer(0);
   }
 };
 

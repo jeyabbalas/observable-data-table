@@ -4,12 +4,14 @@
 export { DataTable } from './core/DataTable.js';
 export { TableRenderer } from './core/TableRenderer.js';
 export { InteractionManager } from './core/InteractionManager.js';
+export { QueryCache } from './core/QueryCache.js';
 
 export { DataLoader } from './data/DataLoader.js';
 export { CloudStorage } from './data/CloudStorage.js';
 export { DataConnector } from './data/DataConnector.js';
 
 export { WorkerConnector } from './connectors/WorkerConnector.js';
+export { BatchingConnector } from './connectors/BatchingConnector.js';
 
 export { Histogram } from './visualizations/Histogram.js';
 export { ValueCounts } from './visualizations/ValueCounts.js';

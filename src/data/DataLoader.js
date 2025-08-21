@@ -48,16 +48,176 @@ export class DataLoader {
   
   async loadFile(file, options = {}) {
     const format = options.format || this.detectFormat(file.name);
-    const arrayBuffer = await file.arrayBuffer();
     
-    this.dataTable.log.info(`Loading ${format} file: ${file.name}`);
+    this.dataTable.log.info(`Loading ${format} file: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
     
     const loader = this.supportedFormats.get(format);
     if (!loader) {
       throw new Error(`Unsupported format: ${format}`);
     }
     
-    return loader(arrayBuffer, { ...options, filename: file.name });
+    // Use streaming for large files (>10MB)
+    const useStreaming = file.size > 10 * 1024 * 1024 && options.streaming !== false;
+    
+    if (useStreaming) {
+      this.dataTable.log.info('Using streaming mode for large file');
+      return this.loadFileStreaming(file, format, loader, options);
+    } else {
+      const arrayBuffer = await file.arrayBuffer();
+      return loader(arrayBuffer, { ...options, filename: file.name });
+    }
+  }
+  
+  async loadFileStreaming(file, format, loader, options = {}) {
+    const chunkSize = 1024 * 1024; // 1MB chunks
+    const totalChunks = Math.ceil(file.size / chunkSize);
+    let processedChunks = 0;
+    
+    this.dataTable.log.info(`Streaming ${file.name} in ${totalChunks} chunks`);
+    
+    // Progress callback
+    const onProgress = options.onProgress || (() => {});
+    
+    try {
+      if (format === 'csv' || format === 'tsv') {
+        return this.loadCSVStreaming(file, options, onProgress);
+      } else {
+        // For non-CSV formats, still load as chunks but process sequentially
+        const chunks = [];
+        
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, file.size);
+          const chunk = file.slice(start, end);
+          const arrayBuffer = await chunk.arrayBuffer();
+          chunks.push(new Uint8Array(arrayBuffer));
+          
+          processedChunks++;
+          onProgress({
+            loaded: processedChunks,
+            total: totalChunks,
+            percent: Math.round((processedChunks / totalChunks) * 100)
+          });
+        }
+        
+        // Combine all chunks
+        const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+        const combined = new Uint8Array(totalLength);
+        let offset = 0;
+        
+        for (const chunk of chunks) {
+          combined.set(chunk, offset);
+          offset += chunk.length;
+        }
+        
+        return loader(combined.buffer, { ...options, filename: file.name, streaming: true });
+      }
+    } catch (error) {
+      this.dataTable.log.error('Streaming load failed:', error);
+      throw error;
+    }
+  }
+  
+  async loadCSVStreaming(file, options = {}, onProgress = () => {}) {
+    const baseFileName = options.filename ? 
+      options.filename.replace(/\.[^/.]+$/, '') : 
+      file.name.replace(/\.[^/.]+$/, '');
+    const tableName = options.tableName || this.generateUniqueTableName(baseFileName);
+    const delimiter = options.delimiter || (file.name.endsWith('.tsv') ? '\t' : ',');
+    
+    this.dataTable.log.info(`Streaming CSV data into table: ${tableName}`);
+    
+    if (!this.dataTable.db || !this.dataTable.conn) {
+      throw new Error('DuckDB not properly initialized');
+    }
+    
+    const chunkSize = 1024 * 1024; // 1MB chunks
+    const totalChunks = Math.ceil(file.size / chunkSize);
+    let processedChunks = 0;
+    let header = null;
+    let buffer = '';
+    let isFirstChunk = true;
+    
+    try {
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        const chunk = file.slice(start, end);
+        const text = await chunk.text();
+        
+        buffer += text;
+        const lines = buffer.split('\n');
+        
+        // Keep incomplete line for next chunk
+        buffer = lines.pop() || '';
+        
+        if (isFirstChunk) {
+          // Extract header from first chunk
+          header = lines[0];
+          
+          // Create table with proper schema
+          const fileName = `${tableName}_chunk_0.csv`;
+          const headerData = header + '\n' + (lines.slice(1).join('\n') || '');
+          await this.dataTable.db.registerFileText(fileName, headerData);
+          
+          const sql = `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM read_csv_auto('${fileName}', delim='${delimiter}', header=true, auto_detect=true, sample_size=1000)`;
+          await this.dataTable.conn.query(sql);
+          
+          isFirstChunk = false;
+        } else if (lines.length > 0) {
+          // Append subsequent chunks
+          const fileName = `${tableName}_chunk_${i}.csv`;
+          const chunkData = header + '\n' + lines.join('\n');
+          await this.dataTable.db.registerFileText(fileName, chunkData);
+          
+          const sql = `INSERT INTO ${tableName} SELECT * FROM read_csv_auto('${fileName}', delim='${delimiter}', header=true, auto_detect=true)`;
+          await this.dataTable.conn.query(sql);
+        }
+        
+        processedChunks++;
+        onProgress({
+          loaded: processedChunks,
+          total: totalChunks,
+          percent: Math.round((processedChunks / totalChunks) * 100),
+          stage: 'processing'
+        });
+      }
+      
+      // Process any remaining buffer
+      if (buffer.trim()) {
+        const fileName = `${tableName}_final.csv`;
+        const finalData = header + '\n' + buffer;
+        await this.dataTable.db.registerFileText(fileName, finalData);
+        
+        const sql = `INSERT INTO ${tableName} SELECT * FROM read_csv_auto('${fileName}', delim='${delimiter}', header=true, auto_detect=true)`;
+        await this.dataTable.conn.query(sql);
+      }
+      
+    } catch (error) {
+      this.dataTable.log.error('CSV streaming failed:', error);
+      throw new Error(`Failed to stream CSV data: ${error.message}`);
+    }
+    
+    // Get final schema and row count
+    const schema = await detectSchema(this.dataTable.conn, tableName);
+    const rowCount = await getRowCount(this.dataTable.conn, tableName);
+    
+    this.dataTable.log.info(`CSV streaming completed: ${rowCount} rows, ${Object.keys(schema).length} columns`);
+    
+    onProgress({
+      loaded: totalChunks,
+      total: totalChunks,
+      percent: 100,
+      stage: 'complete'
+    });
+    
+    return {
+      tableName,
+      schema,
+      rowCount,
+      format: 'csv',
+      streaming: true
+    };
   }
   
   detectFormat(path) {

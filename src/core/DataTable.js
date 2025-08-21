@@ -5,7 +5,9 @@ import { DataLoader } from '../data/DataLoader.js';
 import { PersistenceManager } from '../storage/PersistenceManager.js';
 import { VersionControl } from '../storage/VersionControl.js';
 import { TableRenderer } from './TableRenderer.js';
+import { QueryCache } from './QueryCache.js';
 import { detectSchema, getDataProfile } from '../data/DuckDBHelpers.js';
+import { BatchingConnector } from '../connectors/BatchingConnector.js';
 
 export class DataTable {
   constructor(options = {}) {
@@ -40,6 +42,11 @@ export class DataTable {
     this.dataLoader = new DataLoader(this);
     this.persistenceManager = null;
     this.versionControl = null;
+    this.queryCache = new QueryCache({
+      ttl: options.cacheTTL || 60000, // 1 minute default
+      maxSize: options.cacheMaxSize || 100,
+      enabled: options.enableCache !== false
+    });
     
     // Performance tracking
     this.performance = {
@@ -47,6 +54,21 @@ export class DataTable {
       initEndTime: null,
       mode: null
     };
+    
+    // Memory monitoring
+    this.memoryMonitor = {
+      enabled: typeof performance !== 'undefined' && performance.memory,
+      lastCheck: 0,
+      checkInterval: 10000, // Check every 10 seconds
+      thresholds: {
+        warning: 0.8, // 80% memory usage
+        critical: 0.9 // 90% memory usage
+      },
+      callbacks: new Set()
+    };
+    
+    // Progress event system
+    this.progressCallbacks = new Set();
     
     // Setup logging
     this.setupLogging();
@@ -143,8 +165,8 @@ export class DataTable {
       this.performance.bundleType = bundle.mainModule.includes('eh') ? 'eh' : 'mvp';
       this.log.debug('Selected DuckDB bundle:', this.performance.bundleType);
       
-      // Create logger
-      const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
+      // Create logger - use ERROR level to reduce console noise
+      const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.ERROR);
       
       // Even in "direct" mode, AsyncDuckDB requires a worker
       // Create a worker internally but don't expose worker management to the user
@@ -197,10 +219,22 @@ export class DataTable {
       }
       
       // Setup Mosaic connector with the DuckDB connection
-      this.connector = wasmConnector({ 
+      const baseConnector = wasmConnector({ 
         duckdb: this.db,
         connection: this.conn 
       });
+      
+      // Optionally wrap with batching connector for performance
+      if (this.options.enableQueryBatching !== false) {
+        this.connector = new BatchingConnector(baseConnector, {
+          batchWindow: this.options.batchWindow || 10,
+          maxBatchSize: this.options.maxBatchSize || 10,
+          enabled: true
+        });
+      } else {
+        this.connector = baseConnector;
+      }
+      
       this.coordinator.databaseConnector(this.connector);
       
       // Capture memory usage if available
@@ -256,8 +290,8 @@ export class DataTable {
       // Create worker using the official DuckDB worker file
       this.worker = new Worker(workerUrl);
       
-      // Create logger
-      const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
+      // Create logger - use ERROR level to reduce console noise
+      const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.ERROR);
       
       // Initialize AsyncDuckDB with the worker (proper pattern)
       this.db = new duckdb.AsyncDuckDB(logger, this.worker);
@@ -295,10 +329,22 @@ export class DataTable {
       this.performance.bundleType = 'worker';
       
       // Setup Mosaic connector with the DuckDB connection
-      this.connector = wasmConnector({ 
+      const baseConnector = wasmConnector({ 
         duckdb: this.db,
         connection: this.conn 
       });
+      
+      // Optionally wrap with batching connector for performance
+      if (this.options.enableQueryBatching !== false) {
+        this.connector = new BatchingConnector(baseConnector, {
+          batchWindow: this.options.batchWindow || 10,
+          maxBatchSize: this.options.maxBatchSize || 10,
+          enabled: true
+        });
+      } else {
+        this.connector = baseConnector;
+      }
+      
       this.coordinator.databaseConnector(this.connector);
       
       // Capture memory usage if available
@@ -375,10 +421,32 @@ export class DataTable {
       // Track data loading
       const loadStartTime = Date.now();
       const fileName = source instanceof File ? source.name : 'data';
+      const fileSize = source instanceof File ? source.size : 0;
       
       this.log.info('Loading data...');
       
-      const result = await this.dataLoader.load(source, options);
+      // Setup progress tracking
+      const progressOptions = {
+        ...options,
+        onProgress: (progress) => {
+          // Emit progress events
+          this.emitProgress({
+            stage: progress.stage || 'loading',
+            percent: progress.percent || 0,
+            loaded: progress.loaded || 0,
+            total: progress.total || 1,
+            fileName,
+            fileSize
+          });
+          
+          // Call user-provided progress callback if available
+          if (options.onProgress) {
+            options.onProgress(progress);
+          }
+        }
+      };
+      
+      const result = await this.dataLoader.load(source, progressOptions);
       
       // Update table name and schema
       this.tableName.value = result.tableName;
@@ -499,22 +567,49 @@ export class DataTable {
     try {
       this.log.debug('Executing SQL:', sql);
       
+      // Check memory pressure before executing queries
+      const memoryStatus = this.checkMemoryPressure();
+      if (memoryStatus && memoryStatus.level === 'critical') {
+        this.log.warn('Skipping query due to critical memory pressure');
+        throw new Error('Query cancelled due to memory pressure');
+      }
+      
       // Both Worker and Direct modes use the same connection approach now
       if (!this.conn) {
         throw new Error('DuckDB connection not available');
       }
       
-      // For large queries, use streaming when available
-      const useStreaming = options.streaming && this.conn.send;
-      let result;
+      // Check cache first for SELECT queries
+      const sqlLower = sql.trim().toLowerCase();
+      const isReadOnlyQuery = sqlLower.startsWith('select') || sqlLower.startsWith('with');
+      let result = null;
+      let fromCache = false;
       
-      if (useStreaming) {
-        // Use streaming for large result sets
-        this.log.debug('Using streaming query execution');
-        result = await this.conn.send(sql);
-      } else {
-        // Standard query execution
-        result = await this.conn.query(sql);
+      if (isReadOnlyQuery && this.queryCache.enabled) {
+        result = this.queryCache.get(sql, options);
+        if (result) {
+          fromCache = true;
+          this.log.debug('Query result served from cache');
+        }
+      }
+      
+      if (!result) {
+        // For large queries, use streaming when available
+        const useStreaming = options.streaming && this.conn.send;
+        
+        if (useStreaming) {
+          // Use streaming for large result sets
+          this.log.debug('Using streaming query execution');
+          result = await this.conn.send(sql);
+        } else {
+          // Standard query execution
+          result = await this.conn.query(sql);
+        }
+        
+        // Cache the result if it's a read-only query
+        if (isReadOnlyQuery) {
+          this.queryCache.set(sql, result, options);
+        }
       }
       
       // Update current SQL
@@ -525,17 +620,18 @@ export class DataTable {
         sql,
         timestamp: Date.now(),
         resultSize: this.getResultSize(result),
-        streaming: useStreaming
+        streaming: options.streaming || false,
+        cached: fromCache
       });
       
-      // Record command for version control
-      if (this.versionControl && sql.trim().toLowerCase().startsWith('select') === false) {
+      // Record command for version control (only for non-SELECT queries)
+      if (this.versionControl && !isReadOnlyQuery) {
         await this.versionControl.recordCommand(sql, {
           tableName: this.tableName.value
         });
       }
       
-      this.log.debug('SQL executed successfully');
+      this.log.debug(`SQL executed successfully ${fromCache ? '(cached)' : ''}`);
       return result;
     } catch (error) {
       this.log.error('Failed to execute SQL:', error);
@@ -576,6 +672,193 @@ export class DataTable {
     return this.persistenceManager !== null;
   }
   
+  /**
+   * Get query cache statistics
+   */
+  getCacheStats() {
+    return this.queryCache ? this.queryCache.getStats() : null;
+  }
+  
+  /**
+   * Enable or disable query caching
+   */
+  setCacheEnabled(enabled) {
+    if (this.queryCache) {
+      this.queryCache.setEnabled(enabled);
+    }
+  }
+  
+  /**
+   * Clear query cache manually
+   */
+  clearCache() {
+    if (this.queryCache) {
+      this.queryCache.clear();
+      this.log.info('Query cache cleared manually');
+    }
+  }
+  
+  /**
+   * Check memory usage and apply adaptive limits
+   */
+  checkMemoryPressure() {
+    if (!this.memoryMonitor.enabled) return null;
+    
+    const now = Date.now();
+    if (now - this.memoryMonitor.lastCheck < this.memoryMonitor.checkInterval) {
+      return null; // Too soon since last check
+    }
+    
+    this.memoryMonitor.lastCheck = now;
+    
+    const memory = performance.memory;
+    const usageRatio = memory.usedJSHeapSize / memory.jsHeapSizeLimit;
+    
+    const status = {
+      used: Math.round(memory.usedJSHeapSize / 1024 / 1024),
+      total: Math.round(memory.totalJSHeapSize / 1024 / 1024), 
+      limit: Math.round(memory.jsHeapSizeLimit / 1024 / 1024),
+      usageRatio,
+      level: 'normal'
+    };
+    
+    // Determine memory pressure level
+    if (usageRatio >= this.memoryMonitor.thresholds.critical) {
+      status.level = 'critical';
+      this.handleCriticalMemoryPressure();
+    } else if (usageRatio >= this.memoryMonitor.thresholds.warning) {
+      status.level = 'warning';
+      this.handleWarningMemoryPressure();
+    }
+    
+    // Notify callbacks
+    this.memoryMonitor.callbacks.forEach(callback => {
+      try {
+        callback(status);
+      } catch (e) {
+        this.log.warn('Memory monitor callback error:', e);
+      }
+    });
+    
+    return status;
+  }
+  
+  /**
+   * Handle warning level memory pressure
+   */
+  handleWarningMemoryPressure() {
+    this.log.warn('Memory pressure detected - applying optimizations');
+    
+    // Reduce cache size and TTL
+    if (this.queryCache) {
+      this.queryCache.maxSize = Math.max(20, Math.floor(this.queryCache.maxSize * 0.7));
+      this.queryCache.ttl = Math.max(15000, Math.floor(this.queryCache.ttl * 0.7));
+      this.queryCache.cleanup(); // Force cleanup
+    }
+    
+    // Clear coordinator cache
+    if (this.coordinator && this.coordinator.cache && this.coordinator.cache.clear) {
+      this.coordinator.cache.clear();
+    }
+  }
+  
+  /**
+   * Handle critical level memory pressure
+   */
+  handleCriticalMemoryPressure() {
+    this.log.error('Critical memory pressure - taking emergency measures');
+    
+    // Disable caching temporarily
+    if (this.queryCache) {
+      this.queryCache.clear();
+      this.queryCache.setEnabled(false);
+    }
+    
+    // Force garbage collection if available
+    if (typeof gc === 'function') {
+      gc();
+    }
+    
+    // Try to reduce DuckDB memory limit
+    if (this.conn) {
+      try {
+        this.conn.query("SET max_memory='256MB'");
+        this.log.info('Reduced DuckDB memory limit due to pressure');
+      } catch (e) {
+        this.log.warn('Failed to reduce DuckDB memory limit:', e);
+      }
+    }
+  }
+  
+  /**
+   * Add callback for memory pressure events
+   */
+  onMemoryPressure(callback) {
+    if (typeof callback === 'function') {
+      this.memoryMonitor.callbacks.add(callback);
+    }
+  }
+  
+  /**
+   * Remove memory pressure callback
+   */
+  offMemoryPressure(callback) {
+    this.memoryMonitor.callbacks.delete(callback);
+  }
+  
+  /**
+   * Get current memory status
+   */
+  getMemoryStatus() {
+    return this.checkMemoryPressure();
+  }
+  
+  /**
+   * Add progress callback for long operations
+   */
+  onProgress(callback) {
+    if (typeof callback === 'function') {
+      this.progressCallbacks.add(callback);
+    }
+  }
+  
+  /**
+   * Remove progress callback
+   */
+  offProgress(callback) {
+    this.progressCallbacks.delete(callback);
+  }
+  
+  /**
+   * Emit progress event to all callbacks
+   */
+  emitProgress(progress) {
+    this.progressCallbacks.forEach(callback => {
+      try {
+        callback(progress);
+      } catch (e) {
+        this.log.warn('Progress callback error:', e);
+      }
+    });
+  }
+  
+  /**
+   * Get query batching statistics
+   */
+  getBatchingStats() {
+    return this.connector && this.connector.getStats ? 
+      this.connector.getStats() : null;
+  }
+  
+  /**
+   * Enable or disable query batching
+   */
+  setBatchingEnabled(enabled) {
+    if (this.connector && this.connector.setEnabled) {
+      this.connector.setEnabled(enabled);
+    }
+  }
+  
   async clearData() {
     try {
       this.log.info('Clearing data...');
@@ -599,7 +882,12 @@ export class DataTable {
         this.container = null; // Clear reference since container is gone
       }
       
-      // Clear coordinator cache to prevent stale data references
+      // Clear query cache and coordinator cache to prevent stale data references
+      if (this.queryCache) {
+        this.queryCache.clear();
+        this.log.debug('Query cache cleared');
+      }
+      
       if (this.coordinator) {
         try {
           // Clear main cache
@@ -704,6 +992,7 @@ export class DataTable {
   getOptimalDuckDBConfig() {
     // Determine optimal memory configuration based on available memory
     let maxMemory = '512MB'; // Default
+    let tempDirectorySize = '128MB'; // Default
     
     if (typeof performance !== 'undefined' && performance.memory) {
       // Use browser memory information if available
@@ -716,14 +1005,35 @@ export class DataTable {
       const memoryMB = Math.max(128, Math.min(1024, Math.floor(targetMemory / 1024 / 1024)));
       maxMemory = `${memoryMB}MB`;
       
-      this.log.debug(`Adaptive memory configuration: ${maxMemory} (available: ${Math.floor(availableMemory/1024/1024)}MB)`);
+      // Temp directory should be 25% of max memory
+      const tempMB = Math.max(32, Math.floor(memoryMB * 0.25));
+      tempDirectorySize = `${tempMB}MB`;
+      
+      this.log.debug(`Adaptive memory configuration: ${maxMemory}, temp: ${tempDirectorySize} (available: ${Math.floor(availableMemory/1024/1024)}MB)`);
     }
     
     return {
+      // Memory management
       'max_memory': maxMemory,
+      'max_temp_directory_size': tempDirectorySize,
+      'temp_directory': '', // Use memory for temp storage (faster)
+      
+      // Performance optimizations for WASM
+      'threads': '1', // Single-threaded for WebAssembly
       'enable_object_cache': 'true',
-      'max_temp_directory_size': '128MB',
-      'enable_progress_bar': 'false' // Disable for better performance
+      'preserve_insertion_order': 'false', // Better performance for analytics
+      
+      // Query execution optimizations
+      'enable_progress_bar': 'false', // Disable for better performance
+      'checkpoint_threshold': '1GB', // Optimize WAL checkpointing
+      
+      // I/O optimizations
+      'enable_http_metadata_cache': 'true',
+      'http_timeout': '30000', // 30 second timeout for HTTP requests
+      
+      // Analytics optimizations
+      'default_order': 'DESC', // Better for most analytics queries
+      'enable_profiling': this.options.logLevel === 'debug' ? 'query_tree' : 'no_output'
     };
   }
   
@@ -776,15 +1086,28 @@ export class DataTable {
         this.persistenceManager.close?.();
       }
       
+      // Cleanup query cache
+      if (this.queryCache) {
+        this.queryCache.destroy();
+        this.queryCache = null;
+      }
+      
       // Cleanup UI
       if (this.container && this.container.parentNode) {
         this.container.parentNode.removeChild(this.container);
+      }
+      
+      // Cleanup connector
+      if (this.connector && this.connector.destroy) {
+        this.connector.destroy();
       }
       
       // Clear references
       this.coordinator = null;
       this.connector = null;
       this.visualizations.clear();
+      this.progressCallbacks.clear();
+      this.memoryMonitor.callbacks.clear();
       
       this.log.info('DataTable destroyed');
     } catch (error) {
