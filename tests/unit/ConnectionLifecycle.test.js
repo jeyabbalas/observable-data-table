@@ -2,27 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataTable } from '../../src/core/DataTable.js';
 
 // Mock DuckDB-WASM for connection lifecycle testing
-const mockConnection = {
-  query: vi.fn(async (sql) => {
-    if (sql.includes('version()')) {
-      return { toArray: () => [{ version: 'v1.0.0-mock' }] };
-    }
-    if (sql.includes('SET')) {
-      return undefined; // Configuration queries return undefined
-    }
-    return { toArray: () => [] };
-  }),
-  close: vi.fn(async () => {}),
-  send: vi.fn(async () => ({ toArray: () => [] }))
-};
-
-const mockDb = {
-  instantiate: vi.fn(async () => {}),
-  connect: vi.fn(async () => mockConnection),
-  terminate: vi.fn(async () => {}),
-  registerFileText: vi.fn(async () => {}),
-  registerFileBuffer: vi.fn(async () => {})
-};
+let mockConnection;
+let mockDb;
 
 vi.mock('@duckdb/duckdb-wasm', () => ({
   getJsDelivrBundles: vi.fn(() => ({
@@ -32,18 +13,39 @@ vi.mock('@duckdb/duckdb-wasm', () => ({
     }
   })),
   selectBundle: vi.fn(async (bundles) => bundles.mvp),
-  AsyncDuckDB: vi.fn().mockImplementation(() => mockDb),
+  AsyncDuckDB: vi.fn().mockImplementation(() => {
+    return mockDb || {
+      instantiate: vi.fn(async () => {}),
+      connect: vi.fn(async () => ({})),
+      terminate: vi.fn(async () => {}),
+      registerFileText: vi.fn(async () => {}),
+      registerFileBuffer: vi.fn(async () => {})
+    };
+  }),
   ConsoleLogger: vi.fn(() => ({})),
   LogLevel: { WARNING: 'WARNING' }
 }));
 
 vi.mock('@uwdata/mosaic-core', () => ({
   Coordinator: vi.fn(() => ({
-    databaseConnector: vi.fn()
+    databaseConnector: vi.fn(),
+    connect: vi.fn(),
+    query: vi.fn(() => Promise.resolve([])),
+    requestQuery: vi.fn(),
+    cache: {
+      clear: vi.fn()
+    }
   })),
   wasmConnector: vi.fn(() => ({
     query: vi.fn(async () => ({ toArray: () => [] }))
-  }))
+  })),
+  Selection: {
+    crossfilter: vi.fn(() => ({}))
+  },
+  MosaicClient: class MockMosaicClient {
+    constructor() {}
+    initialize() {}
+  }
 }));
 
 describe('DuckDB Connection Lifecycle Management', () => {
@@ -52,6 +54,46 @@ describe('DuckDB Connection Lifecycle Management', () => {
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
+    
+    // Create fresh mocks for each test
+    mockConnection = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('version()')) {
+          return { toArray: () => [{ version: 'v1.0.0-mock' }] };
+        }
+        if (sql.includes('SET')) {
+          return undefined; // Configuration queries return undefined
+        }
+        if (sql.includes('CREATE OR REPLACE TABLE')) {
+          return { toArray: () => [] }; // Table creation returns empty result
+        }
+        if (sql.includes('PRAGMA table_info') || sql.includes('DESCRIBE')) {
+          return { 
+            toArray: () => [
+              { column_name: 'id', column_type: 'INTEGER', null: 'NO' },
+              { column_name: 'name', column_type: 'VARCHAR', null: 'NO' }
+            ]
+          };
+        }
+        if (sql.includes('SELECT COUNT(*)')) {
+          return { toArray: () => [{ count: 2 }] };
+        }
+        if (sql.includes('SELECT')) {
+          return { toArray: () => [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }] };
+        }
+        return { toArray: () => [] };
+      }),
+      close: vi.fn(async () => {}),
+      send: vi.fn(async () => ({ toArray: () => [] }))
+    };
+
+    mockDb = {
+      instantiate: vi.fn(async () => {}),
+      connect: vi.fn(async () => mockConnection),
+      terminate: vi.fn(async () => {}),
+      registerFileText: vi.fn(async () => {}),
+      registerFileBuffer: vi.fn(async () => {})
+    };
     
     // Mock Worker environment
     global.Worker = vi.fn().mockImplementation(() => ({
@@ -157,7 +199,7 @@ describe('DuckDB Connection Lifecycle Management', () => {
       
       // Should use same connection
       expect(dataTable.conn).toBe(initialConnection);
-      expect(mockConnection.query).toHaveBeenCalledTimes(8); // 3 config + version + 3 queries + 1 more from setup
+      expect(mockConnection.query).toHaveBeenCalledTimes(16); // 12 config + version + 3 user queries
     });
 
     it('should handle connection errors without losing connection reference', async () => {
@@ -178,8 +220,10 @@ describe('DuckDB Connection Lifecycle Management', () => {
       // Connection should still be the same
       expect(dataTable.conn).toBe(initialConnection);
       
-      // Next query should work
-      await expect(dataTable.executeSQL('SELECT 1')).resolves.toBeDefined();
+      // Next query should work and return the mock result
+      const result = await dataTable.executeSQL('SELECT 1');
+      expect(result).toBeDefined();
+      expect(result.toArray).toBeDefined();
     });
   });
 

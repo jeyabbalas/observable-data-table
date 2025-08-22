@@ -209,6 +209,17 @@ export class DataTable {
       // Create a connection
       this.conn = await this.db.connect();
       
+      // Configure DuckDB for optimal performance
+      const config = this.getOptimalDuckDBConfig();
+      
+      for (const [key, value] of Object.entries(config)) {
+        try {
+          await this.conn.query(`SET ${key}='${value}'`);
+        } catch (e) {
+          this.log.warn(`Failed to set ${key}=${value}:`, e.message);
+        }
+      }
+      
       // Get DuckDB version
       try {
         const versionResult = await this.conn.query('SELECT version() as version');
@@ -1043,10 +1054,12 @@ export class DataTable {
       if (this.conn) {
         this.log.debug('Closing DuckDB connection...');
         await this.conn.close();
-        this.conn = null;
       }
     } catch (error) {
       this.log.warn('Error closing connection:', error);
+    } finally {
+      // Always clear the connection reference, even if close failed
+      this.conn = null;
     }
   }
   
@@ -1069,9 +1082,11 @@ export class DataTable {
           if (typeof this.db.terminate === 'function') {
             await this.db.terminate();
           }
-          this.db = null;
         } catch (error) {
           this.log.warn('Error terminating DuckDB:', error);
+        } finally {
+          // Always clear the db reference, even if terminate failed
+          this.db = null;
         }
       }
       

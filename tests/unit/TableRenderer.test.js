@@ -1,35 +1,78 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TableRenderer } from '../../src/core/TableRenderer.js';
 
+// Mock Apache Arrow Table for testing
+class MockArrowTable {
+  constructor(data) {
+    this.schema = { fields: ['name', 'age', 'city'] };
+    this.names = ['name', 'age', 'city'];
+    this.children = [['Alice', 'Bob'], [30, 25], ['NYC', 'LA']];
+    this._data = data;
+  }
+
+  toArray() {
+    return this._data;
+  }
+
+  get [Symbol.toStringTag]() {
+    return 'Table';
+  }
+}
+
 // Mock Mosaic components
 vi.mock('@uwdata/mosaic-core', () => ({
   MosaicClient: class MockMosaicClient {
-    constructor() {}
+    constructor() {
+      this._enabled = true;
+      this._initialized = false;
+      this._coordinator = null;
+      this._pending = Promise.resolve();
+    }
+    
+    get coordinator() { return this._coordinator; }
+    set coordinator(coordinator) { this._coordinator = coordinator; }
+    get enabled() { return this._enabled; }
+    get pending() { return this._pending; }
+    get filterBy() { return undefined; }
+    get filterStable() { return true; }
+    
     initialize() {
-      // Mock parent initialize method
+      this._initialized = true;
       return Promise.resolve();
     }
+    
+    query() { return null; }
+    queryResult() { return this; }
+    queryError() { return this; }
+    queryPending() { return this; }
+    requestQuery() { return this; }
+    requestUpdate() { return this; }
+    prepare() { return Promise.resolve(); }
+    update() { return this; }
+    destroy() {}
   },
   Selection: {
     crossfilter: vi.fn(() => ({}))
   }
 }));
 
-vi.mock('@uwdata/mosaic-sql', () => ({
-  Query: {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        where: vi.fn(() => ({
-          orderby: vi.fn(() => ({
-            limit: vi.fn(() => ({
-              offset: vi.fn(() => ({}))
-            }))
-          }))
-        }))
-      }))
-    }))
-  }
-}));
+vi.mock('@uwdata/mosaic-sql', () => {
+  const mockQuery = {
+    from: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    orderby: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    offset: vi.fn().mockReturnThis(),
+    toString: vi.fn().mockReturnValue('SELECT * FROM test_table LIMIT 100 OFFSET 0')
+  };
+
+  return {
+    Query: mockQuery,
+    asc: vi.fn((field) => ({ field, order: 'ASC' })),
+    desc: vi.fn((field) => ({ field, order: 'DESC' }))
+  };
+});
 
 vi.mock('@preact/signals-core', () => ({
   signal: vi.fn((initial) => ({
@@ -66,7 +109,7 @@ describe('TableRenderer', () => {
     }
   });
 
-  describe('Constructor', () => {
+  describe('Constructor and Initialization', () => {
     it('should create TableRenderer with required options', () => {
       tableRenderer = new TableRenderer({
         table: 'test_table',
@@ -112,9 +155,7 @@ describe('TableRenderer', () => {
       expect(thead).toBeTruthy();
       expect(tbody).toBeTruthy();
     });
-  });
 
-  describe('Initialization', () => {
     it('should initialize successfully', async () => {
       tableRenderer = new TableRenderer({
         table: 'test_table',
@@ -123,8 +164,6 @@ describe('TableRenderer', () => {
         coordinator: mockCoordinator
       });
 
-      // NOTE: coordinator.connect() is now handled externally by DataTable
-      // The initialize() method should complete successfully and return this
       await expect(tableRenderer.initialize()).resolves.toBe(tableRenderer);
       expect(tableRenderer.connected).toBe(true);
     });
@@ -138,6 +177,40 @@ describe('TableRenderer', () => {
       });
 
       await expect(tableRenderer.initialize()).resolves.toBe(tableRenderer);
+    });
+  });
+
+  describe('MosaicClient Interface', () => {
+    beforeEach(() => {
+      tableRenderer = new TableRenderer({
+        table: 'test_table',
+        schema: { name: { type: 'string' }, age: { type: 'number' } },
+        container,
+        coordinator: mockCoordinator
+      });
+    });
+
+    it('should inherit from MosaicClient', () => {
+      expect(tableRenderer).toHaveProperty('coordinator');
+      expect(tableRenderer).toHaveProperty('enabled');
+      expect(tableRenderer).toHaveProperty('pending');
+      expect(typeof tableRenderer.query).toBe('function');
+      expect(typeof tableRenderer.queryResult).toBe('function');
+      expect(typeof tableRenderer.requestQuery).toBe('function');
+    });
+
+    it('should have correct initial state', () => {
+      expect(tableRenderer.enabled).toBe(true);
+      expect(tableRenderer._initialized).toBe(false);
+      expect(tableRenderer.coordinator).toBe(mockCoordinator);
+    });
+
+    it('should have query method that returns an object', () => {
+      const query = tableRenderer.query();
+      
+      expect(query).toBeTruthy();
+      expect(typeof query).toBe('object');
+      expect(query.toString()).toBe('SELECT * FROM test_table LIMIT 100 OFFSET 0');
     });
   });
 
@@ -220,6 +293,95 @@ describe('TableRenderer', () => {
       
       expect(consoleSpy).toHaveBeenCalledTimes(2);
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Arrow Data Handling', () => {
+    beforeEach(() => {
+      tableRenderer = new TableRenderer({
+        table: 'test_table',
+        schema: { name: { type: 'string' }, age: { type: 'number' } },
+        container,
+        coordinator: mockCoordinator
+      });
+    });
+
+    it('should handle regular JavaScript array data', () => {
+      const regularData = [
+        { name: 'Alice', age: 30 },
+        { name: 'Bob', age: 25 }
+      ];
+
+      const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
+      
+      const result = tableRenderer.queryResult(regularData);
+
+      expect(renderRowsSpy).toHaveBeenCalledWith(regularData);
+      expect(result).toBe(tableRenderer);
+    });
+
+    it('should convert Arrow Table to JavaScript array', () => {
+      const sampleData = [
+        { name: 'Alice', age: 30 },
+        { name: 'Bob', age: 25 }
+      ];
+      const arrowTable = new MockArrowTable(sampleData);
+
+      const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
+      
+      const result = tableRenderer.queryResult(arrowTable);
+
+      expect(renderRowsSpy).toHaveBeenCalledWith(sampleData);
+      expect(renderRowsSpy).not.toHaveBeenCalledWith(arrowTable);
+      expect(result).toBe(tableRenderer);
+    });
+
+    it('should handle null/undefined data gracefully', () => {
+      const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
+      
+      tableRenderer.queryResult(null);
+      expect(renderRowsSpy).toHaveBeenCalledWith(null);
+
+      tableRenderer.queryResult(undefined);
+      expect(renderRowsSpy).toHaveBeenCalledWith(undefined);
+    });
+
+    it('should handle malformed Arrow Table without toArray method', () => {
+      const malformedArrowTable = {
+        schema: { fields: ['name'] },
+        names: ['name']
+      };
+
+      const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
+      
+      tableRenderer.queryResult(malformedArrowTable);
+      expect(renderRowsSpy).toHaveBeenCalledWith(malformedArrowTable);
+    });
+
+    it('should handle empty Arrow Table', () => {
+      const emptyArrowTable = new MockArrowTable([]);
+      const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
+      
+      tableRenderer.queryResult(emptyArrowTable);
+      
+      expect(renderRowsSpy).toHaveBeenCalledWith([]);
+    });
+
+    it('should handle large Arrow Tables efficiently', () => {
+      const largeData = Array.from({ length: 1000 }, (_, i) => ({
+        id: i,
+        name: `User${i}`,
+        value: Math.random()
+      }));
+      const largeArrowTable = new MockArrowTable(largeData);
+      const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
+      
+      const startTime = performance.now();
+      tableRenderer.queryResult(largeArrowTable);
+      const endTime = performance.now();
+      
+      expect(renderRowsSpy).toHaveBeenCalledWith(largeData);
+      expect(endTime - startTime).toBeLessThan(2000); // Should be reasonably fast
     });
   });
 
@@ -365,7 +527,6 @@ describe('TableRenderer', () => {
     it('should load more data when scrolling near bottom', () => {
       tableRenderer.loadMoreData = vi.fn();
 
-      // Mock scroll event near bottom
       const scrollEvent = {
         target: {
           scrollTop: 300,
@@ -382,7 +543,6 @@ describe('TableRenderer', () => {
     it('should not load more data when not near bottom', () => {
       tableRenderer.loadMoreData = vi.fn();
 
-      // Mock scroll event not near bottom
       const scrollEvent = {
         target: {
           scrollTop: 100,
@@ -411,7 +571,6 @@ describe('TableRenderer', () => {
       tableRenderer.offset = 100;
       tableRenderer.data = [{ name: 'Alice' }];
       
-      // Add some rows to tbody
       const tbody = container.querySelector('tbody');
       tbody.innerHTML = '<tr><td>Test</td></tr>';
 
@@ -444,6 +603,178 @@ describe('TableRenderer', () => {
     });
   });
 
+  describe('Data Flow Integration', () => {
+    beforeEach(() => {
+      tableRenderer = new TableRenderer({
+        table: 'test_table',
+        schema: { name: { type: 'string' }, age: { type: 'number' } },
+        container,
+        coordinator: mockCoordinator
+      });
+    });
+
+    it('should handle queryResult callback properly', () => {
+      tableRenderer.renderHeader(['name', 'age']);
+      
+      const testData = [
+        { name: 'Alice', age: 30 },
+        { name: 'Bob', age: 25 }
+      ];
+
+      const result = tableRenderer.queryResult(testData);
+      expect(result).toBe(tableRenderer);
+      
+      expect(tableRenderer.data.length).toBeGreaterThan(0);
+      expect(tableRenderer.data).toContain(testData[0]);
+      expect(tableRenderer.data).toContain(testData[1]);
+    });
+
+    it('should handle empty query results', () => {
+      tableRenderer.renderHeader(['name', 'age']);
+      
+      const result = tableRenderer.queryResult([]);
+      expect(result).toBe(tableRenderer);
+      expect(tableRenderer.data).toEqual([]);
+    });
+
+    it('should handle queryError callback', () => {
+      const testError = new Error('Query failed');
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
+      const result = tableRenderer.queryError(testError);
+      expect(result).toBe(tableRenderer);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Query error for table:', 'test_table', testError);
+      
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('Request Flow', () => {
+    beforeEach(() => {
+      tableRenderer = new TableRenderer({
+        table: 'test_table',
+        schema: { name: { type: 'string' }, age: { type: 'number' } },
+        container,
+        coordinator: mockCoordinator
+      });
+    });
+
+    it('should request data through coordinator when connected', async () => {
+      await tableRenderer.initialize();
+      
+      tableRenderer.coordinator = mockCoordinator;
+      tableRenderer.connected = true;
+      
+      const requestQuerySpy = vi.spyOn(tableRenderer, 'requestQuery');
+      
+      tableRenderer.requestData();
+      
+      expect(requestQuerySpy).toHaveBeenCalled();
+    });
+
+    it('should warn when coordinator is not available', async () => {
+      await tableRenderer.initialize();
+      
+      tableRenderer.coordinator = null;
+      tableRenderer.connected = false;
+      
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      
+      tableRenderer.requestData();
+      
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Cannot request data: coordinator not available or not connected');
+      consoleWarnSpy.mockRestore();
+    });
+  });
+
+  describe('Fallback Behavior', () => {
+    it('should NOT call requestData during initialization', async () => {
+      tableRenderer = new TableRenderer({
+        table: 'test_table',
+        schema: { name: { type: 'string' } },
+        container,
+        coordinator: mockCoordinator
+      });
+
+      const requestDataSpy = vi.spyOn(tableRenderer, 'requestData');
+      
+      await tableRenderer.initialize();
+
+      expect(requestDataSpy).not.toHaveBeenCalled();
+    });
+
+    it('should trigger fallback when no data is received', async () => {
+      vi.useFakeTimers();
+      
+      try {
+        tableRenderer = new TableRenderer({
+          table: 'test_table',
+          schema: { name: { type: 'string' } },
+          container,
+          coordinator: null,
+          connection: {
+            query: vi.fn().mockResolvedValue({
+              toArray: vi.fn().mockReturnValue([{ name: 'Alice' }])
+            })
+          }
+        });
+
+        const fallbackSpy = vi.spyOn(tableRenderer, 'fallbackDataLoad');
+        
+        const initPromise = tableRenderer.initialize();
+        vi.advanceTimersByTime(1100);
+        await initPromise;
+
+        expect(fallbackSpy).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('Error Recovery', () => {
+    beforeEach(() => {
+      tableRenderer = new TableRenderer({
+        table: 'test_table',
+        schema: { name: { type: 'string' } },
+        container,
+        coordinator: mockCoordinator
+      });
+    });
+
+    it('should handle Arrow Table with broken toArray method', () => {
+      const brokenArrowTable = {
+        schema: { fields: ['name'] },
+        names: ['name'],
+        toArray: vi.fn().mockImplementation(() => {
+          throw new Error('toArray conversion failed');
+        })
+      };
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
+      
+      expect(() => {
+        tableRenderer.queryResult(brokenArrowTable);
+      }).not.toThrow();
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('should fallback to empty array when Arrow conversion fails', () => {
+      const brokenArrowTable = {
+        schema: { fields: ['name'] },
+        toArray: () => { throw new Error('Conversion failed'); }
+      };
+
+      const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
+      
+      tableRenderer.queryResult(brokenArrowTable);
+      
+      expect(renderRowsSpy).toHaveBeenCalledWith([]);
+    });
+  });
+
   describe('Cleanup', () => {
     it('should destroy properly', () => {
       tableRenderer = new TableRenderer({
@@ -453,15 +784,30 @@ describe('TableRenderer', () => {
         coordinator: mockCoordinator
       });
 
-      // Add table to container
       const scrollContainer = container.querySelector('.datatable-scroll');
       expect(scrollContainer).toBeTruthy();
 
       tableRenderer.destroy();
 
-      // Should remove table from container
       const remainingScrollContainer = container.querySelector('.datatable-scroll');
       expect(remainingScrollContainer).toBeFalsy();
+    });
+
+    it('should clean up all resources', () => {
+      tableRenderer = new TableRenderer({
+        table: 'test_table',
+        schema: { name: { type: 'string' } },
+        container,
+        coordinator: mockCoordinator
+      });
+
+      expect(container.children.length).toBeGreaterThan(0);
+      
+      tableRenderer.destroy();
+      
+      expect(container.children.length).toBe(0);
+      expect(tableRenderer.coordinator).toBe(null);
+      expect(tableRenderer.data).toEqual([]);
     });
   });
 });

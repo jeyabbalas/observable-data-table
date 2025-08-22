@@ -529,9 +529,8 @@ describe('DataTable', () => {
       // Should not throw despite the error
       await expect(dataTable.destroy()).resolves.toBeUndefined();
       
-      // Due to the current implementation bug, db is not set to null when terminate fails
-      // This test documents the current behavior - the db should be cleaned up even on error
-      expect(dataTable.db.terminate).toHaveBeenCalled();
+      // Database should be properly cleaned up even when terminate fails
+      expect(dataTable.db).toBeNull();
     });
   });
 });

@@ -163,10 +163,6 @@ describe('DataLoader Comprehensive Tests', () => {
       );
     });
 
-    it.skip('should load CSV in Worker mode', async () => {
-      // Skipped: Current implementation doesn't support worker mode for data loading
-      // All data loading happens in direct mode regardless of useWorker setting
-    });
   });
 
   describe('JSON Loading Tests', () => {
