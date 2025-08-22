@@ -17,7 +17,10 @@ export const createMockDuckDB = () => {
     connect: vi.fn().mockResolvedValue(mockConnection),
     instantiate: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
-    terminate: vi.fn().mockResolvedValue(undefined)
+    terminate: vi.fn().mockResolvedValue(undefined),
+    registerFileText: vi.fn().mockResolvedValue(undefined),
+    registerFileBuffer: vi.fn().mockResolvedValue(undefined),
+    registerFileHandle: vi.fn().mockResolvedValue(undefined)
   };
 
   return {
