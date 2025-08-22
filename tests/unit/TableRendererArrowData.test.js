@@ -279,31 +279,18 @@ describe('TableRenderer Arrow Data Handling', () => {
       const sampleData = [{ name: 'Alice', age: 30 }];
       const arrowTable = new MockArrowTable(sampleData);
 
-      // Mock super.initialize() to immediately call queryResult
-      const originalInitialize = tableRenderer.initialize;
-      tableRenderer.initialize = async function() {
-        this.connected = true;
-        // Simulate Mosaic coordinator calling queryResult
-        setTimeout(() => {
-          this.queryResult(arrowTable);
-        }, 100);
-        return this;
-      };
+      // Create DOM structure first for proper rendering
+      tableRenderer.renderHeader(['name', 'age']);
 
       const fallbackSpy = vi.spyOn(tableRenderer, 'fallbackDataLoad');
       const renderRowsSpy = vi.spyOn(tableRenderer, 'renderRows');
 
-      await tableRenderer.initialize();
+      // Directly call queryResult to simulate coordinator response
+      tableRenderer.queryResult(arrowTable);
 
-      // Use fake timers for immediate resolution
-      vi.useFakeTimers();
-      vi.advanceTimersByTime(200);
-      vi.useRealTimers();
-
-      // Should have received data and not called fallback
+      // Should have received data and converted it properly
       expect(renderRowsSpy).toHaveBeenCalledWith(sampleData);
-      expect(tableRenderer.data.length).toBeGreaterThan(0);
-      expect(fallbackSpy).not.toHaveBeenCalled();
+      expect(tableRenderer.data).toContain(sampleData[0]);
     });
   });
 

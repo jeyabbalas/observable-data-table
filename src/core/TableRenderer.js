@@ -126,6 +126,7 @@ export class TableRenderer extends MosaicClient {
     if (this.fallbackDataLoad) {
       this.fallbackDataLoad();
     }
+    return this;
   }
   
   async prepare() {

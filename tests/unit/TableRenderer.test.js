@@ -123,8 +123,10 @@ describe('TableRenderer', () => {
         coordinator: mockCoordinator
       });
 
+      // NOTE: coordinator.connect() is now handled externally by DataTable
+      // The initialize() method should complete successfully and return this
       await expect(tableRenderer.initialize()).resolves.toBe(tableRenderer);
-      expect(mockCoordinator.connect).toHaveBeenCalledWith(tableRenderer);
+      expect(tableRenderer.connected).toBe(true);
     });
 
     it('should handle initialization without coordinator', async () => {
