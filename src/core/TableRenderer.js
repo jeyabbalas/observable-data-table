@@ -3,6 +3,7 @@ import { Query, asc, desc } from '@uwdata/mosaic-sql';
 import { signal } from '@preact/signals-core';
 import { Type } from '@uwdata/flechette';
 import { Histogram } from '../visualizations/Histogram.js';
+import { DateHistogram } from '../visualizations/DateHistogram.js';
 
 export class TableRenderer extends MosaicClient {
   constructor(options) {
@@ -337,11 +338,39 @@ export class TableRenderer extends MosaicClient {
     
     const mockField = {
       name: fieldName,
-      type: mockTypeObject
+      type: mockTypeObject,
+      // Include original DuckDB type for formatting decisions
+      duckdbType: fieldSchema.type
     };
     
-    // Check if numeric field - create histogram
-    if (this.isNumericField(fieldSchema)) {
+    // Check field type and create appropriate visualization
+    if (this.isTemporalField(fieldSchema)) {
+      // Create date histogram for temporal fields
+      try {
+        const dateHistogram = new DateHistogram({
+          table: this.table,
+          column: fieldName,
+          field: mockField,
+          filterBy: this.filterBy
+        });
+        
+        // Connect to coordinator
+        if (this.coordinator) {
+          this.coordinator.connect(dateHistogram);
+        }
+        
+        // Add to container
+        container.appendChild(dateHistogram.node());
+        
+        // Store reference for cleanup
+        this.visualizations.set(fieldName, dateHistogram);
+        
+      } catch (error) {
+        console.error(`Failed to create date histogram for ${fieldName}:`, error);
+        this.createPlaceholderViz(container, 'Error');
+      }
+    } else if (this.isNumericField(fieldSchema)) {
+      // Create histogram for numeric fields
       try {
         const histogram = new Histogram({
           table: this.table,
@@ -366,7 +395,7 @@ export class TableRenderer extends MosaicClient {
         this.createPlaceholderViz(container, 'Error');
       }
     } else {
-      // For non-numeric fields, show placeholder for now
+      // For non-numeric, non-temporal fields, show placeholder for now
       this.createPlaceholderViz(container, 'Text');
     }
   }
@@ -402,6 +431,35 @@ export class TableRenderer extends MosaicClient {
     
     // Fallback to simple type check
     return fieldSchema.type === 'number';
+  }
+  
+  /**
+   * Check if field represents a temporal (date/time) type
+   * @param {Object} fieldSchema - Field schema object
+   * @returns {boolean}
+   */
+  isTemporalField(fieldSchema) {
+    if (!fieldSchema || !fieldSchema.type) return false;
+    
+    // Handle Arrow types
+    if (fieldSchema.type.typeId !== undefined) {
+      const typeId = fieldSchema.type.typeId;
+      return typeId === Type.Date || 
+             typeId === Type.Timestamp;
+    }
+    
+    // Handle DuckDB string types from detectSchema
+    if (typeof fieldSchema.type === 'string') {
+      const duckdbType = fieldSchema.type.toUpperCase();
+      return (
+        duckdbType.includes('DATE') ||
+        duckdbType.includes('TIMESTAMP') ||
+        duckdbType.includes('DATETIME') ||
+        duckdbType.includes('TIME')
+      );
+    }
+    
+    return false;
   }
   
   /**

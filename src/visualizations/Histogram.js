@@ -71,10 +71,17 @@ export class Histogram extends ColumnVisualization {
         bins = data;
       }
       
+      // Pass actual min/max from fieldInfo for accurate display
+      const actualRange = this.fieldInfo ? {
+        min: this.fieldInfo.min,
+        max: this.fieldInfo.max
+      } : null;
+      
       // Create histogram visualization
       const histogramSVG = createHistogram(bins, this.field, {
         width: 125,
-        height: 40
+        height: 40,
+        actualRange
       });
       
       // Clear container and add histogram
