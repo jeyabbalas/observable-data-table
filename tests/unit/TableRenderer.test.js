@@ -230,8 +230,17 @@ describe('TableRenderer', () => {
 
       const headerCells = container.querySelectorAll('th');
       expect(headerCells).toHaveLength(2);
-      expect(headerCells[0].textContent).toBe('name');
-      expect(headerCells[1].textContent).toBe('age');
+      
+      // Check that the column names are present in the header structure
+      const nameColumn = headerCells[0].querySelector('.column-header');
+      const ageColumn = headerCells[1].querySelector('.column-header');
+      
+      expect(nameColumn).toBeTruthy();
+      expect(ageColumn).toBeTruthy();
+      
+      // Check that column names are displayed correctly
+      expect(nameColumn.textContent).toContain('name');
+      expect(ageColumn.textContent).toContain('age');
     });
 
     it('should add click handlers for sorting', () => {

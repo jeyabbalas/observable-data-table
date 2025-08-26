@@ -1,6 +1,8 @@
 import { MosaicClient, Selection } from '@uwdata/mosaic-core';
 import { Query, asc, desc } from '@uwdata/mosaic-sql';
 import { signal } from '@preact/signals-core';
+import { Type } from '@uwdata/flechette';
+import { Histogram } from '../visualizations/Histogram.js';
 
 export class TableRenderer extends MosaicClient {
   constructor(options) {
@@ -24,6 +26,9 @@ export class TableRenderer extends MosaicClient {
     this.filters = signal([]);
     this.data = [];
     this.connected = false;
+    
+    // Column visualizations
+    this.visualizations = new Map();
     
     // Create table structure
     this.createTable();
@@ -159,21 +164,62 @@ export class TableRenderer extends MosaicClient {
     // Clear existing headers to prevent duplicates
     this.thead.innerHTML = '';
     
+    // Clear existing visualizations
+    this.visualizations.forEach(viz => viz.destroy());
+    this.visualizations.clear();
+    
     const headerRow = document.createElement('tr');
     headerRow.style.backgroundColor = '#f5f5f5';
     headerRow.style.borderBottom = '2px solid #ddd';
     
-    fields.forEach((field) => {
+    fields.forEach((fieldName) => {
       const th = document.createElement('th');
-      th.textContent = field;
       th.style.padding = '8px 12px';
       th.style.textAlign = 'left';
       th.style.cursor = 'pointer';
       th.style.userSelect = 'none';
       th.style.position = 'relative';
+      th.style.verticalAlign = 'top';
+      
+      // Create column header structure
+      const headerContent = document.createElement('div');
+      headerContent.className = 'column-header';
+      
+      // Column name
+      const columnName = document.createElement('div');
+      columnName.textContent = fieldName;
+      columnName.style.fontWeight = 'bold';
+      columnName.style.marginBottom = '4px';
+      headerContent.appendChild(columnName);
+      
+      // Data type label
+      const dataType = this.getFieldType(fieldName);
+      const typeLabel = document.createElement('div');
+      typeLabel.textContent = dataType;
+      typeLabel.style.fontSize = '11px';
+      typeLabel.style.color = '#666';
+      typeLabel.style.marginBottom = '4px';
+      headerContent.appendChild(typeLabel);
+      
+      // Visualization container
+      const vizContainer = document.createElement('div');
+      vizContainer.className = 'column-viz';
+      vizContainer.style.height = '50px';
+      vizContainer.style.marginBottom = '4px';
+      headerContent.appendChild(vizContainer);
+      
+      // Create visualization if appropriate
+      this.createVisualization(fieldName, vizContainer);
+      
+      th.appendChild(headerContent);
       
       // Add sort functionality
-      th.addEventListener('click', () => this.toggleSort(field));
+      th.addEventListener('click', (e) => {
+        // Only trigger sort if not clicking on visualization
+        if (!e.target.closest('.column-viz')) {
+          this.toggleSort(fieldName);
+        }
+      });
       
       // Add hover effect
       th.addEventListener('mouseenter', () => {
@@ -183,20 +229,200 @@ export class TableRenderer extends MosaicClient {
         th.style.backgroundColor = '#f5f5f5';
       });
       
-      // Create visualization container
-      const vizContainer = document.createElement('div');
-      vizContainer.className = 'column-viz';
-      vizContainer.style.marginTop = '4px';
-      vizContainer.style.height = '40px';
-      th.appendChild(vizContainer);
-      
-      // TODO: Create appropriate visualization based on field type
-      // This will be implemented when we create the visualization components
-      
       headerRow.appendChild(th);
     });
     
     this.thead.appendChild(headerRow);
+  }
+  
+  /**
+   * Get field type from schema
+   * @param {string} fieldName - Name of the field
+   * @returns {string} Type description
+   */
+  getFieldType(fieldName) {
+    const fieldSchema = this.schema[fieldName];
+    if (!fieldSchema) return 'unknown';
+    
+    // Handle Arrow schema format (has typeId)
+    if (fieldSchema.type && fieldSchema.type.typeId !== undefined) {
+      switch (fieldSchema.type.typeId) {
+        case Type.Int:
+          return `int${fieldSchema.type.bitWidth || ''}`;
+        case Type.Float:
+          return `float${fieldSchema.type.precision === 1 ? '32' : '64'}`;
+        case Type.Utf8:
+        case Type.LargeUtf8:
+          return 'string';
+        case Type.Bool:
+          return 'boolean';
+        case Type.Date:
+          return 'date';
+        case Type.Timestamp:
+          return 'timestamp';
+        default:
+          return 'other';
+      }
+    }
+    
+    // Handle DuckDB string types from detectSchema
+    if (typeof fieldSchema.type === 'string') {
+      const duckdbType = fieldSchema.type.toUpperCase();
+      
+      // Numeric types
+      if (duckdbType.includes('INTEGER') || duckdbType.includes('BIGINT') || duckdbType.includes('SMALLINT') || duckdbType.includes('TINYINT')) {
+        return 'integer';
+      }
+      if (duckdbType.includes('DOUBLE') || duckdbType.includes('REAL') || duckdbType.includes('FLOAT')) {
+        return 'float';
+      }
+      if (duckdbType.includes('DECIMAL') || duckdbType.includes('NUMERIC')) {
+        return 'decimal';
+      }
+      
+      // String types
+      if (duckdbType.includes('VARCHAR') || duckdbType.includes('TEXT') || duckdbType.includes('STRING')) {
+        return 'string';
+      }
+      
+      // Boolean types
+      if (duckdbType.includes('BOOLEAN') || duckdbType.includes('BOOL')) {
+        return 'boolean';
+      }
+      
+      // Date/time types
+      if (duckdbType.includes('DATE')) {
+        return 'date';
+      }
+      if (duckdbType.includes('TIMESTAMP') || duckdbType.includes('DATETIME')) {
+        return 'timestamp';
+      }
+      if (duckdbType.includes('TIME')) {
+        return 'time';
+      }
+      
+      return duckdbType.toLowerCase();
+    }
+    
+    // Simple type inference fallback
+    if (fieldSchema.type === 'number') return 'number';
+    if (fieldSchema.type === 'string') return 'string';
+    if (fieldSchema.type === 'boolean') return 'boolean';
+    
+    return fieldSchema.type || 'unknown';
+  }
+  
+  /**
+   * Create appropriate visualization for a field
+   * @param {string} fieldName - Name of the field
+   * @param {HTMLElement} container - Container element for visualization
+   */
+  createVisualization(fieldName, container) {
+    const fieldSchema = this.schema[fieldName];
+    if (!fieldSchema) return;
+    
+    // Create mock field object for compatibility with visualization classes
+    // Handle both Arrow schema and DuckDB string types
+    let mockTypeObject;
+    if (fieldSchema.type && fieldSchema.type.typeId !== undefined) {
+      // Already an Arrow type object
+      mockTypeObject = fieldSchema.type;
+    } else {
+      // Create a mock Arrow-like type object for DuckDB string types
+      mockTypeObject = {
+        typeId: this.isNumericField(fieldSchema) ? 'numeric' : 'string',
+        toString: () => fieldSchema.type
+      };
+    }
+    
+    const mockField = {
+      name: fieldName,
+      type: mockTypeObject
+    };
+    
+    // Check if numeric field - create histogram
+    if (this.isNumericField(fieldSchema)) {
+      try {
+        const histogram = new Histogram({
+          table: this.table,
+          column: fieldName,
+          field: mockField,
+          filterBy: this.filterBy
+        });
+        
+        // Connect to coordinator
+        if (this.coordinator) {
+          this.coordinator.connect(histogram);
+        }
+        
+        // Add to container
+        container.appendChild(histogram.node());
+        
+        // Store reference for cleanup
+        this.visualizations.set(fieldName, histogram);
+        
+      } catch (error) {
+        console.error(`Failed to create histogram for ${fieldName}:`, error);
+        this.createPlaceholderViz(container, 'Error');
+      }
+    } else {
+      // For non-numeric fields, show placeholder for now
+      this.createPlaceholderViz(container, 'Text');
+    }
+  }
+  
+  /**
+   * Check if field is numeric
+   * @param {Object} fieldSchema - Field schema object
+   * @returns {boolean}
+   */
+  isNumericField(fieldSchema) {
+    // Handle Arrow schema format (has typeId)
+    if (fieldSchema.type && fieldSchema.type.typeId !== undefined) {
+      const typeId = fieldSchema.type.typeId;
+      return typeId === Type.Int || typeId === Type.Float || typeId === Type.Decimal;
+    }
+    
+    // Handle DuckDB string types from detectSchema
+    if (typeof fieldSchema.type === 'string') {
+      const duckdbType = fieldSchema.type.toUpperCase();
+      
+      return (
+        duckdbType.includes('INTEGER') ||
+        duckdbType.includes('BIGINT') ||
+        duckdbType.includes('SMALLINT') ||
+        duckdbType.includes('TINYINT') ||
+        duckdbType.includes('DOUBLE') ||
+        duckdbType.includes('REAL') ||
+        duckdbType.includes('FLOAT') ||
+        duckdbType.includes('DECIMAL') ||
+        duckdbType.includes('NUMERIC')
+      );
+    }
+    
+    // Fallback to simple type check
+    return fieldSchema.type === 'number';
+  }
+  
+  /**
+   * Create placeholder visualization
+   * @param {HTMLElement} container - Container element
+   * @param {string} label - Label to display
+   */
+  createPlaceholderViz(container, label) {
+    const placeholder = document.createElement('div');
+    placeholder.style.width = '125px';
+    placeholder.style.height = '40px';
+    placeholder.style.display = 'flex';
+    placeholder.style.alignItems = 'center';
+    placeholder.style.justifyContent = 'center';
+    placeholder.style.backgroundColor = '#f9f9f9';
+    placeholder.style.border = '1px solid #e0e0e0';
+    placeholder.style.borderRadius = '4px';
+    placeholder.style.color = '#999';
+    placeholder.style.fontSize = '11px';
+    placeholder.textContent = label;
+    container.appendChild(placeholder);
   }
   
   renderRows(data) {
@@ -379,6 +605,12 @@ export class TableRenderer extends MosaicClient {
   }
 
   destroy() {
+    // Clean up visualizations first
+    if (this.visualizations) {
+      this.visualizations.forEach(viz => viz.destroy());
+      this.visualizations.clear();
+    }
+    
     // Disconnect from coordinator if connected
     if (this.coordinator && this.connected) {
       try {
