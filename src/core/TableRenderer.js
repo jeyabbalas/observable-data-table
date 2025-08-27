@@ -211,20 +211,32 @@ export class TableRenderer extends MosaicClient {
       const dataType = this.getFieldType(fieldName);
       const typeLabel = document.createElement('div');
       typeLabel.textContent = dataType;
+      typeLabel.className = 'gray';  // Add class for hover updates
       typeLabel.style.fontSize = '11px';
       typeLabel.style.color = '#666';
       typeLabel.style.marginBottom = '4px';
       headerContent.appendChild(typeLabel);
       
+      // Stats display for visualization hover/selection info
+      const statsDisplay = document.createElement('div');
+      statsDisplay.className = 'stats-display';
+      statsDisplay.style.fontSize = '10px';
+      statsDisplay.style.color = '#666';
+      statsDisplay.style.fontWeight = '500';
+      statsDisplay.style.minHeight = '12px';
+      statsDisplay.style.marginBottom = '4px';
+      statsDisplay.style.textAlign = 'center';
+      headerContent.appendChild(statsDisplay);
+      
       // Visualization container
       const vizContainer = document.createElement('div');
       vizContainer.className = 'column-viz';
-      vizContainer.style.height = '50px';
+      vizContainer.style.height = '52px';  // Increased to accommodate 50px histogram
       vizContainer.style.marginBottom = '4px';
       headerContent.appendChild(vizContainer);
       
       // Create visualization if appropriate
-      this.createVisualization(fieldName, vizContainer);
+      this.createVisualization(fieldName, vizContainer, statsDisplay);
       
       th.appendChild(headerContent);
       
@@ -451,7 +463,7 @@ export class TableRenderer extends MosaicClient {
    * @param {string} fieldName - Name of the field
    * @param {HTMLElement} container - Container element for visualization
    */
-  createVisualization(fieldName, container) {
+  createVisualization(fieldName, container, statsDisplay) {
     const fieldSchema = this.schema[fieldName];
     if (!fieldSchema) return;
     
@@ -509,7 +521,8 @@ export class TableRenderer extends MosaicClient {
           table: this.table,
           column: fieldName,
           field: mockField,
-          filterBy: this.filterBy
+          filterBy: this.filterBy,
+          statsDisplay: statsDisplay
         });
         
         // Connect to coordinator

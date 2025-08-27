@@ -5,10 +5,10 @@ import * as d3 from 'd3';
  */
 const DEFAULT_OPTIONS = {
   width: 125,
-  height: 40,
+  height: 50,                  // Increased to match interactive version
   marginTop: 2,
   marginRight: 4,
-  marginBottom: 12,
+  marginBottom: 16,            // More space for x-axis labels
   marginLeft: 4,
   fillColor: '#2563eb',        // Blue-600
   backgroundColor: '#d1d5db',   // Gray-300
@@ -19,6 +19,7 @@ const DEFAULT_OPTIONS = {
 
 /**
  * Create a static histogram visualization using D3.js
+ * This is the non-interactive version for backward compatibility
  * @param {Array} bins - Array of bin objects with x0, x1, count properties
  * @param {Object} field - Arrow field metadata
  * @param {Object} options - Rendering options

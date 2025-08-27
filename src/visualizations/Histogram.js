@@ -2,6 +2,8 @@ import { Type } from '@uwdata/flechette';
 import { Query, count, sql } from '@uwdata/mosaic-sql';
 import { ColumnVisualization } from './ColumnVisualization.js';
 import { createHistogram } from './utils/HistogramRenderer.js';
+import { createInteractiveHistogram } from './utils/InteractiveHistogram.js';
+import { createInteractionHandler } from './utils/InteractionHandler.js';
 
 /**
  * Numeric histogram visualization for continuous data columns
@@ -13,6 +15,28 @@ export class Histogram extends ColumnVisualization {
     
     this.bins = options.bins || 18; // Default bin count following Quak pattern
     this.container.className = 'column-visualization histogram-visualization';
+    
+    // External stats display element from column header
+    this.statsDisplay = options.statsDisplay || null;
+    
+    // Interactive mode flag
+    this.interactive = options.interactive !== false; // Default to interactive
+    
+    // Interaction state
+    this.interactionHandler = null;
+    this.currentHistogram = null;
+    
+    if (this.interactive) {
+      // Create interaction handler
+      this.interactionHandler = createInteractionHandler({
+        table: this.table,
+        column: this.column,
+        field: this.field,
+        filterBy: this.filterBy,
+        client: this,
+        debounceDelay: 50
+      });
+    }
   }
   
   /**
@@ -123,22 +147,144 @@ export class Histogram extends ColumnVisualization {
         max: this.fieldInfo.max
       } : null;
       
-      // Create histogram visualization with null count
-      const histogramSVG = createHistogram(regularBins, this.field, {
-        width: 125,
-        height: 40,
-        actualRange,
-        nullCount
-      });
-      
-      // Clear container and add histogram
+      // Clear container first
       this.container.innerHTML = '';
-      this.container.appendChild(histogramSVG);
+      
+      // Initialize external stats display with total count
+      if (this.statsDisplay) {
+        const totalCount = regularBins.reduce((sum, bin) => sum + bin.count, 0) + nullCount;
+        this.statsDisplay.textContent = `${totalCount.toLocaleString()} rows`;
+      }
+      
+      if (this.interactive) {
+        this.renderInteractive(regularBins, actualRange, nullCount);
+      } else {
+        this.renderStatic(regularBins, actualRange, nullCount);
+      }
       
     } catch (error) {
       console.error(`Failed to render histogram for ${this.column}:`, error);
       this.renderError();
     }
+  }
+  
+  /**
+   * Render static histogram
+   * @param {Array} regularBins - Regular histogram bins
+   * @param {Object} actualRange - Actual data range
+   * @param {number} nullCount - Count of null values
+   */
+  renderStatic(regularBins, actualRange, nullCount) {
+    const histogramSVG = createHistogram(regularBins, this.field, {
+      width: 125,
+      height: 50,          // Increased to match interactive version
+      actualRange,
+      nullCount
+    });
+    
+    this.container.appendChild(histogramSVG);
+  }
+  
+  /**
+   * Render interactive histogram
+   * @param {Array} regularBins - Regular histogram bins
+   * @param {Object} actualRange - Actual data range
+   * @param {number} nullCount - Count of null values
+   */
+  renderInteractive(regularBins, actualRange, nullCount) {
+    // Clean up previous instance
+    if (this.currentHistogram) {
+      this.currentHistogram.destroy();
+      this.currentHistogram = null;
+    }
+    
+    // Create interactive histogram with external stats display
+    this.currentHistogram = createInteractiveHistogram(
+      regularBins, 
+      this.field, 
+      {
+        width: 125,
+        height: 50,  // Further increased to show x-axis labels properly
+        actualRange,
+        nullCount,
+        statsDisplay: this.statsDisplay  // Pass external stats element
+      },
+      (selection, isFinal) => this.handleSelectionChange(selection, isFinal),
+      (hoverData) => this.handleHover(hoverData)
+    );
+    
+    // Add to container
+    this.container.appendChild(this.currentHistogram.node());
+  }
+  
+  /**
+   * Handle selection changes from interactive histogram
+   * @param {Array|string|null} selection - The selection data
+   * @param {boolean} isFinal - Whether this is a final selection
+   */
+  handleSelectionChange(selection, isFinal) {
+    if (!this.interactionHandler) return;
+    
+    if (selection === null) {
+      // Clear selection
+      this.interactionHandler.handleSelectionChange(null, 'interval', isFinal);
+    } else if (selection === 'null') {
+      // Null value selected
+      this.interactionHandler.handleSelectionChange(null, 'null', isFinal);
+    } else if (Array.isArray(selection) && selection.length === 2) {
+      // Range selection
+      this.interactionHandler.handleSelectionChange(selection, 'interval', isFinal);
+    } else {
+      console.warn('Unexpected selection format:', selection);
+    }
+  }
+  
+  /**
+   * Handle hover events from interactive histogram
+   * @param {Object|null} hoverData - Hover data or null when not hovering
+   */
+  handleHover(hoverData) {
+    // Update external stats display if available
+    if (this.statsDisplay) {
+      if (hoverData) {
+        const { count, bin } = hoverData;
+        const percentage = (count / this.getTotalCount()) * 100;
+        this.statsDisplay.textContent = `${count.toLocaleString()} row${count === 1 ? '' : 's'} (${percentage.toFixed(1)}%)`;
+      } else {
+        // Reset to total count
+        const totalCount = this.getTotalCount();
+        this.statsDisplay.textContent = `${totalCount.toLocaleString()} rows`;
+      }
+    }
+    
+    // Also update column header type label if available (for backward compatibility)
+    const headerLabel = this.container.closest('th')?.querySelector('.gray');
+    if (headerLabel && !hoverData) {
+      // Reset to field type when not hovering
+      const fieldType = this.getFieldType();
+      headerLabel.textContent = fieldType;
+    }
+  }
+  
+  /**
+   * Get total count for percentage calculations
+   * @returns {number} Total count
+   */
+  getTotalCount() {
+    // This would ideally come from the data, but we can estimate from the coordinator
+    // For now, return a reasonable default
+    return 1000; // TODO: Get actual total from coordinator
+  }
+  
+  /**
+   * Get field type string for display
+   * @returns {string} Field type
+   */
+  getFieldType() {
+    if (this.field && this.field.duckdbType) {
+      return this.field.duckdbType.toLowerCase();
+    }
+    return 'numeric';
   }
   
   /**
@@ -172,5 +318,24 @@ export class Histogram extends ColumnVisualization {
    */
   static getDisplayName() {
     return 'Histogram';
+  }
+  
+  /**
+   * Clean up resources when visualization is destroyed
+   */
+  destroy() {
+    // Clean up interactive components
+    if (this.currentHistogram) {
+      this.currentHistogram.destroy();
+      this.currentHistogram = null;
+    }
+    
+    if (this.interactionHandler) {
+      this.interactionHandler.destroy();
+      this.interactionHandler = null;
+    }
+    
+    // Call parent cleanup
+    super.destroy();
   }
 }

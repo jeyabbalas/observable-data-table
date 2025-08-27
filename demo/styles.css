@@ -745,6 +745,142 @@ body {
   font-style: italic;
 }
 
+/* Interactive Histogram Styles - Integrated Display */
+.histogram-visualization {
+  height: auto;
+}
+
+.histogram-visualization svg .stats-display text {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--text-muted);
+}
+
+.histogram-visualization svg .value-label rect {
+  fill: white;
+  stroke: var(--border);
+  stroke-width: 1px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+.histogram-visualization svg .value-label text {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--text-primary);
+}
+
+/* D3 Brush Styling */
+.column-viz .brush .overlay {
+  cursor: crosshair;
+  fill: none;
+  pointer-events: all;
+}
+
+.column-viz .brush .selection {
+  fill: var(--primary-color);
+  fill-opacity: 0.2;
+  stroke: var(--primary-color);
+  stroke-width: 1px;
+  stroke-opacity: 0.8;
+  shape-rendering: crispEdges;
+}
+
+.column-viz .brush .handle {
+  fill: var(--primary-color);
+  cursor: ew-resize;
+}
+
+/* Histogram Interaction States */
+.column-viz .foreground-bars rect {
+  transition: opacity 0.15s ease;
+}
+
+.column-viz .foreground-bars rect:hover {
+  opacity: 1 !important;
+}
+
+/* Null bar styling */
+.column-viz .null-bars rect {
+  transition: opacity 0.15s ease;
+}
+
+.column-viz .null-bars text {
+  font-weight: 600;
+  user-select: none;
+}
+
+/* Hover overlay for interaction */
+.column-viz .hover-overlay {
+  cursor: crosshair;
+  fill: transparent;
+}
+
+/* Background bars for context */
+.column-viz .background-bars rect {
+  opacity: 0.3;
+  transition: opacity 0.15s ease;
+}
+
+/* Selection feedback */
+.column-viz.has-selection .background-bars rect {
+  opacity: 0.15;
+}
+
+.column-viz.has-selection .foreground-bars rect {
+  opacity: 0.3;
+}
+
+.column-viz.has-selection .foreground-bars rect.selected {
+  opacity: 1.0;
+}
+
+/* Axis and labels */
+.column-viz svg .axis {
+  font-family: var(--font-sans);
+  font-size: 10px;
+}
+
+.column-viz svg .axis .domain {
+  display: none;
+}
+
+.column-viz svg .axis .tick line {
+  stroke: var(--text-muted);
+  stroke-width: 1px;
+}
+
+.column-viz svg .axis .tick text {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+/* Dark mode tooltip adjustments */
+@media (prefers-color-scheme: dark) {
+  .histogram-visualization svg .value-label rect {
+    fill: var(--surface);
+    stroke: var(--border);
+  }
+  
+  .column-viz .brush .selection {
+    fill-opacity: 0.3;
+  }
+  
+  .column-viz svg .axis .tick line {
+    stroke: var(--text-muted);
+  }
+  
+  .column-viz svg .axis .tick text {
+    fill: var(--text-muted);
+  }
+}
+
+/* Animation for smooth transitions */
+.histogram-visualization svg .value-label {
+  transition: opacity 0.15s ease;
+}
+
 /* Responsive Design */
 @media (max-width: 1200px) {
   #app {
