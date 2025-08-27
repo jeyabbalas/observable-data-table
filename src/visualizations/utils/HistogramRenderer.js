@@ -240,17 +240,10 @@ function getValueFormatter(field) {
   return (value) => {
     if (value == null || isNaN(value)) return 'N/A';
     
-    // Check if field indicates integer type
-    const isInteger = isIntegerField(field);
-    
-    if (isInteger && Number.isInteger(value)) {
-      // For integers, no decimals
-      return d3.format(',d')(value);
-    } else {
-      // For floats, use compact notation with appropriate precision
-      const format = d3.format('.3s');
-      return format(value);
-    }
+    // Use SI format for all numeric values to handle large numbers compactly
+    // .2s provides up to 2 significant digits: 18347 → "18k", 999987786 → "1.0G"
+    const format = d3.format('.2s');
+    return format(value);
   };
 }
 
