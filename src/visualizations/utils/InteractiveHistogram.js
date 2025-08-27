@@ -33,10 +33,11 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const nullCount = options.nullCount || 0;
   const statsDisplay = options.statsDisplay || null;  // External stats display element
+  const totalCount = options.totalCount || (bins.reduce((sum, bin) => sum + bin.count, 0) + nullCount);
   
   if (!bins || bins.length === 0) {
     if (nullCount > 0) {
-      return createNullOnlyInteractiveHistogram(nullCount, opts, onSelectionChange, onHover);
+      return createNullOnlyInteractiveHistogram(nullCount, totalCount, opts, onSelectionChange, onHover);
     }
     return createEmptyInteractiveHistogram(opts);
   }
@@ -50,7 +51,6 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   const xExtent = d3.extent(bins, d => d.x0).concat(d3.extent(bins, d => d.x1));
   const xDomain = [Math.min(...xExtent), Math.max(...xExtent)];
   const yMax = Math.max(d3.max(bins, d => d.count) || 1, nullCount);
-  const totalCount = bins.reduce((sum, bin) => sum + bin.count, 0) + nullCount;
   
   const xScale = d3.scaleLinear()
     .domain(xDomain)
@@ -96,14 +96,30 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
       .attr('height', yScale(0) - yScale(nullCount))
       .attr('fill', opts.backgroundColor);
       
-    // Foreground null bar (gold color)
+    // Foreground null bar (gold color) with hover functionality
     nullBarGroup.append('rect')
       .attr('class', 'null-fg')
       .attr('x', opts.marginLeft)
       .attr('width', nullBarWidth)
       .attr('y', yScale(nullCount))
       .attr('height', yScale(0) - yScale(nullCount))
-      .attr('fill', opts.nullColor);
+      .attr('fill', opts.nullColor)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function() {
+        if (onHover) {
+          onHover({ count: nullCount, bin: null, isNull: true });
+        }
+      })
+      .on('mouseleave', function() {
+        if (onHover) {
+          onHover(null);
+        }
+      })
+      .on('click', function() {
+        if (onSelectionChange) {
+          onSelectionChange('null', true);
+        }
+      });
       
     // Null symbol
     nullBarGroup.append('text')
@@ -445,7 +461,7 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
 /**
  * Create interactive histogram with only null values
  */
-function createNullOnlyInteractiveHistogram(nullCount, opts, onSelectionChange, onHover) {
+function createNullOnlyInteractiveHistogram(nullCount, totalCount, opts, onSelectionChange, onHover) {
   const svg = d3.create('svg')
     .attr('width', opts.width)
     .attr('height', opts.height)
@@ -458,6 +474,7 @@ function createNullOnlyInteractiveHistogram(nullCount, opts, onSelectionChange, 
     .range([opts.height - opts.marginBottom, opts.marginTop]);
   
   const nullBarWidth = 5;
+  const statsDisplay = opts.statsDisplay || null;
   
   // Update external stats display if provided
   if (statsDisplay) {
@@ -472,14 +489,24 @@ function createNullOnlyInteractiveHistogram(nullCount, opts, onSelectionChange, 
     .attr('height', yScale(0) - yScale(nullCount))
     .attr('fill', opts.backgroundColor);
     
-  // Foreground null bar
+  // Foreground null bar with hover functionality
   const nullBar = svg.append('rect')
     .attr('x', opts.marginLeft)
     .attr('width', nullBarWidth)
     .attr('y', yScale(nullCount))
     .attr('height', yScale(0) - yScale(nullCount))
     .attr('fill', opts.nullColor)
-    .style('cursor', 'pointer');
+    .style('cursor', 'pointer')
+    .on('mouseenter', function() {
+      if (onHover) {
+        onHover({ count: nullCount, bin: null, isNull: true });
+      }
+    })
+    .on('mouseleave', function() {
+      if (onHover) {
+        onHover(null);
+      }
+    });
     
   // Null symbol
   svg.append('text')

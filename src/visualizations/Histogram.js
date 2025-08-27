@@ -26,6 +26,9 @@ export class Histogram extends ColumnVisualization {
     this.interactionHandler = null;
     this.currentHistogram = null;
     
+    // Store actual total count for correct proportion calculations
+    this.actualTotalCount = 0;
+    
     if (this.interactive) {
       // Create interaction handler
       this.interactionHandler = createInteractionHandler({
@@ -150,10 +153,12 @@ export class Histogram extends ColumnVisualization {
       // Clear container first
       this.container.innerHTML = '';
       
+      // Calculate and store actual total count for proportion calculations
+      this.actualTotalCount = regularBins.reduce((sum, bin) => sum + bin.count, 0) + nullCount;
+      
       // Initialize external stats display with total count
       if (this.statsDisplay) {
-        const totalCount = regularBins.reduce((sum, bin) => sum + bin.count, 0) + nullCount;
-        this.statsDisplay.textContent = `${totalCount.toLocaleString()} rows`;
+        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows`;
       }
       
       if (this.interactive) {
@@ -207,7 +212,8 @@ export class Histogram extends ColumnVisualization {
         height: 50,  // Further increased to show x-axis labels properly
         actualRange,
         nullCount,
-        statsDisplay: this.statsDisplay  // Pass external stats element
+        statsDisplay: this.statsDisplay,  // Pass external stats element
+        totalCount: this.actualTotalCount  // Pass actual total count
       },
       (selection, isFinal) => this.handleSelectionChange(selection, isFinal),
       (hoverData) => this.handleHover(hoverData)
@@ -247,13 +253,13 @@ export class Histogram extends ColumnVisualization {
     // Update external stats display if available
     if (this.statsDisplay) {
       if (hoverData) {
-        const { count, bin } = hoverData;
-        const percentage = (count / this.getTotalCount()) * 100;
-        this.statsDisplay.textContent = `${count.toLocaleString()} row${count === 1 ? '' : 's'} (${percentage.toFixed(1)}%)`;
+        const { count, bin, isNull } = hoverData;
+        const percentage = (count / this.actualTotalCount) * 100;
+        const label = isNull ? 'null value' : 'row';
+        this.statsDisplay.textContent = `${count.toLocaleString()} ${label}${count === 1 ? '' : 's'} (${percentage.toFixed(1)}%)`;
       } else {
         // Reset to total count
-        const totalCount = this.getTotalCount();
-        this.statsDisplay.textContent = `${totalCount.toLocaleString()} rows`;
+        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows`;
       }
     }
     
@@ -271,9 +277,7 @@ export class Histogram extends ColumnVisualization {
    * @returns {number} Total count
    */
   getTotalCount() {
-    // This would ideally come from the data, but we can estimate from the coordinator
-    // For now, return a reasonable default
-    return 1000; // TODO: Get actual total from coordinator
+    return this.actualTotalCount;
   }
   
   /**
