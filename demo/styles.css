@@ -643,6 +643,69 @@ body {
   min-width: 140px;
 }
 
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+/* Sort Indicator Styles */
+.sort-indicator {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.sort-indicator:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.sort-indicator svg {
+  transition: opacity 0.2s ease;
+}
+
+.sort-arrow-up,
+.sort-arrow-down {
+  transition: fill 0.2s ease;
+}
+
+.sort-order-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 2px solid var(--background);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .sort-indicator:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .sort-order-badge {
+    border-color: var(--surface);
+  }
+}
+
 /* Column Visualization Components */
 .column-visualization {
   display: block;

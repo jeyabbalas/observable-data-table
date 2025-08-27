@@ -186,12 +186,26 @@ export class TableRenderer extends MosaicClient {
       const headerContent = document.createElement('div');
       headerContent.className = 'column-header';
       
+      // Header top row (name and sort indicator)
+      const headerTop = document.createElement('div');
+      headerTop.className = 'header-top';
+      headerTop.style.display = 'flex';
+      headerTop.style.justifyContent = 'space-between';
+      headerTop.style.alignItems = 'flex-start';
+      headerTop.style.marginBottom = '4px';
+      
       // Column name
       const columnName = document.createElement('div');
       columnName.textContent = fieldName;
       columnName.style.fontWeight = 'bold';
-      columnName.style.marginBottom = '4px';
-      headerContent.appendChild(columnName);
+      columnName.style.flex = '1';
+      headerTop.appendChild(columnName);
+      
+      // Sort indicator
+      const sortIndicator = this.createSortIndicator(fieldName);
+      headerTop.appendChild(sortIndicator);
+      
+      headerContent.appendChild(headerTop);
       
       // Data type label
       const dataType = this.getFieldType(fieldName);
@@ -216,7 +230,7 @@ export class TableRenderer extends MosaicClient {
       
       // Add sort functionality
       th.addEventListener('click', (e) => {
-        // Only trigger sort if not clicking on visualization
+        // Allow sorting from column header or sort indicator
         if (!e.target.closest('.column-viz')) {
           this.toggleSort(fieldName);
         }
@@ -236,6 +250,125 @@ export class TableRenderer extends MosaicClient {
     this.thead.appendChild(headerRow);
   }
   
+  /**
+   * Create sort indicator for a column
+   * @param {string} fieldName - Name of the field
+   * @returns {HTMLElement} Sort indicator element
+   */
+  createSortIndicator(fieldName) {
+    const container = document.createElement('div');
+    container.className = 'sort-indicator';
+    container.style.position = 'relative';
+    container.style.width = '20px';
+    container.style.height = '20px';
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
+    container.style.cursor = 'pointer';
+    container.dataset.field = fieldName;
+    
+    // Create SVG with arrows
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '12');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 12 16');
+    svg.style.pointerEvents = 'none';
+    
+    // Up arrow (descending)
+    const upArrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    upArrow.setAttribute('d', 'M6 2 L10 6 L2 6 Z');
+    upArrow.setAttribute('class', 'sort-arrow-up');
+    upArrow.setAttribute('fill', '#cbd5e1'); // Default light gray
+    
+    // Down arrow (ascending)
+    const downArrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    downArrow.setAttribute('d', 'M6 14 L2 10 L10 10 Z');
+    downArrow.setAttribute('class', 'sort-arrow-down');
+    downArrow.setAttribute('fill', '#cbd5e1'); // Default light gray
+    
+    svg.appendChild(upArrow);
+    svg.appendChild(downArrow);
+    container.appendChild(svg);
+    
+    // Sort order badge (hidden initially)
+    const badge = document.createElement('div');
+    badge.className = 'sort-order-badge';
+    badge.style.position = 'absolute';
+    badge.style.top = '-8px';
+    badge.style.right = '-8px';
+    badge.style.width = '16px';
+    badge.style.height = '16px';
+    badge.style.borderRadius = '50%';
+    badge.style.backgroundColor = 'var(--primary-color)';
+    badge.style.color = 'white';
+    badge.style.fontSize = '10px';
+    badge.style.fontWeight = 'bold';
+    badge.style.display = 'none';
+    badge.style.alignItems = 'center';
+    badge.style.justifyContent = 'center';
+    badge.style.lineHeight = '1';
+    container.appendChild(badge);
+    
+    // Update initial state
+    this.updateSortIndicator(fieldName);
+    
+    return container;
+  }
+
+  /**
+   * Update sort indicator visual state
+   * @param {string} fieldName - Name of the field
+   */
+  updateSortIndicator(fieldName) {
+    const indicator = this.thead.querySelector(`.sort-indicator[data-field="${fieldName}"]`);
+    if (!indicator) return;
+    
+    const upArrow = indicator.querySelector('.sort-arrow-up');
+    const downArrow = indicator.querySelector('.sort-arrow-down');
+    const badge = indicator.querySelector('.sort-order-badge');
+    
+    // Find current sort state for this field
+    const currentSort = this.orderBy.value.find(o => o.field === fieldName);
+    const sortIndex = this.orderBy.value.findIndex(o => o.field === fieldName);
+    
+    if (currentSort) {
+      // Field is currently sorted
+      if (currentSort.order === 'ASC') {
+        // Ascending: highlight down arrow
+        upArrow.setAttribute('fill', '#cbd5e1');
+        downArrow.setAttribute('fill', 'var(--primary-color)');
+      } else {
+        // Descending: highlight up arrow
+        upArrow.setAttribute('fill', 'var(--primary-color)');
+        downArrow.setAttribute('fill', '#cbd5e1');
+      }
+      
+      // Show sort order badge if multiple columns are sorted
+      if (this.orderBy.value.length > 1) {
+        badge.textContent = (sortIndex + 1).toString();
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    } else {
+      // Field is not sorted: show both arrows in light gray
+      upArrow.setAttribute('fill', '#cbd5e1');
+      downArrow.setAttribute('fill', '#cbd5e1');
+      badge.style.display = 'none';
+    }
+  }
+
+  /**
+   * Update all sort indicators
+   */
+  updateAllSortIndicators() {
+    const indicators = this.thead.querySelectorAll('.sort-indicator');
+    indicators.forEach(indicator => {
+      const fieldName = indicator.dataset.field;
+      this.updateSortIndicator(fieldName);
+    });
+  }
+
   /**
    * Get field type from schema
    * @param {string} fieldName - Name of the field
@@ -597,6 +730,9 @@ export class TableRenderer extends MosaicClient {
     }
     
     this.orderBy.value = newOrderBy;
+    
+    // Update all sort indicators to reflect new state
+    this.updateAllSortIndicators();
     
     // Reset and reload data
     this.clearData();
