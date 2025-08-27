@@ -26,19 +26,29 @@ const DEFAULT_OPTIONS = {
  */
 export function createHistogram(bins, field, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
+  const nullCount = options.nullCount || 0;
   
   if (!bins || bins.length === 0) {
+    // If only null values, show special histogram
+    if (nullCount > 0) {
+      return createNullOnlyHistogram(nullCount, opts);
+    }
     return createEmptyHistogram(opts);
   }
   
-  // Calculate scales
+  // Calculate null bar dimensions
+  const nullBarWidth = nullCount > 0 ? 5 : 0;
+  const nullBarGap = nullCount > 0 ? 4 : 0;
+  const totalNullSpace = nullBarWidth + nullBarGap;
+  
+  // Calculate scales with null bar space adjustment
   const xExtent = d3.extent(bins, d => d.x0).concat(d3.extent(bins, d => d.x1));
   const xDomain = [Math.min(...xExtent), Math.max(...xExtent)];
-  const yMax = d3.max(bins, d => d.count) || 1;
+  const yMax = Math.max(d3.max(bins, d => d.count) || 1, nullCount);
   
   const xScale = d3.scaleLinear()
     .domain(xDomain)
-    .range([opts.marginLeft, opts.width - opts.marginRight]);
+    .range([opts.marginLeft + totalNullSpace, opts.width - opts.marginRight]);
     
   const yScale = d3.scaleLinear()
     .domain([0, yMax])
@@ -52,7 +62,37 @@ export function createHistogram(bins, field, options = {}) {
     .style('max-width', '100%')
     .style('height', 'auto');
   
-  // Background bars (for context)
+  // Render null bar if present
+  if (nullCount > 0) {
+    // Background null bar
+    svg.append('rect')
+      .attr('x', opts.marginLeft)
+      .attr('width', nullBarWidth)
+      .attr('y', yScale(nullCount))
+      .attr('height', yScale(0) - yScale(nullCount))
+      .attr('fill', opts.backgroundColor);
+      
+    // Foreground null bar (gold color)
+    svg.append('rect')
+      .attr('x', opts.marginLeft)
+      .attr('width', nullBarWidth)
+      .attr('y', yScale(nullCount))
+      .attr('height', yScale(0) - yScale(nullCount))
+      .attr('fill', opts.nullColor);
+      
+    // Null symbol below bar
+    svg.append('text')
+      .attr('x', opts.marginLeft + nullBarWidth / 2)
+      .attr('y', opts.height - 2)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'system-ui, sans-serif')
+      .attr('font-size', '10px')
+      .attr('font-weight', 'normal')
+      .attr('fill', opts.nullColor)
+      .text('∅');
+  }
+  
+  // Background bars for regular histogram (for context)
   svg.append('g')
     .attr('fill', opts.backgroundColor)
     .selectAll('rect')
@@ -63,7 +103,7 @@ export function createHistogram(bins, field, options = {}) {
     .attr('y', d => yScale(d.count))
     .attr('height', d => yScale(0) - yScale(d.count));
   
-  // Foreground bars (actual data)
+  // Foreground bars for regular histogram (actual data)
   svg.append('g')
     .attr('fill', opts.fillColor)
     .selectAll('rect')
@@ -87,9 +127,9 @@ export function createHistogram(bins, field, options = {}) {
     [minVal, maxVal] = xDomain;
   }
   
-  // Min label
+  // Min label (positioned after null bar space)
   svg.append('text')
-    .attr('x', opts.marginLeft)
+    .attr('x', opts.marginLeft + totalNullSpace)
     .attr('y', opts.height - 2)
     .attr('text-anchor', 'start')
     .attr('font-family', 'system-ui, sans-serif')
@@ -119,25 +159,36 @@ export function createHistogram(bins, field, options = {}) {
  */
 export function createDateHistogram(bins, field, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
+  const nullCount = options.nullCount || 0;
   
   if (!bins || bins.length === 0) {
+    // If only null values, show special histogram
+    if (nullCount > 0) {
+      return createNullOnlyHistogram(nullCount, opts);
+    }
     return createEmptyHistogram(opts);
   }
   
+  // Calculate null bar dimensions
+  const nullBarWidth = nullCount > 0 ? 5 : 0;
+  const nullBarGap = nullCount > 0 ? 4 : 0;
+  const totalNullSpace = nullBarWidth + nullBarGap;
+  
   // Convert date strings to Date objects and calculate scales
   const dateExtent = d3.extent(bins, d => new Date(d.x0));
-  const yMax = d3.max(bins, d => d.count) || 1;
+  const yMax = Math.max(d3.max(bins, d => d.count) || 1, nullCount);
   
   const xScale = d3.scaleTime()
     .domain(dateExtent)
-    .range([opts.marginLeft, opts.width - opts.marginRight]);
+    .range([opts.marginLeft + totalNullSpace, opts.width - opts.marginRight]);
     
   const yScale = d3.scaleLinear()
     .domain([0, yMax])
     .range([opts.height - opts.marginBottom, opts.marginTop]);
   
   // Calculate bar width based on data temporal spacing
-  const barWidth = Math.max(2, (opts.width - opts.marginLeft - opts.marginRight) / bins.length - opts.barPadding);
+  const availableWidth = opts.width - opts.marginLeft - opts.marginRight - totalNullSpace;
+  const barWidth = Math.max(2, availableWidth / bins.length - opts.barPadding);
   
   // Create SVG
   const svg = d3.create('svg')
@@ -147,7 +198,37 @@ export function createDateHistogram(bins, field, options = {}) {
     .style('max-width', '100%')
     .style('height', 'auto');
   
-  // Background bars (for context)
+  // Render null bar if present
+  if (nullCount > 0) {
+    // Background null bar
+    svg.append('rect')
+      .attr('x', opts.marginLeft)
+      .attr('width', nullBarWidth)
+      .attr('y', yScale(nullCount))
+      .attr('height', yScale(0) - yScale(nullCount))
+      .attr('fill', opts.backgroundColor);
+      
+    // Foreground null bar (gold color)
+    svg.append('rect')
+      .attr('x', opts.marginLeft)
+      .attr('width', nullBarWidth)
+      .attr('y', yScale(nullCount))
+      .attr('height', yScale(0) - yScale(nullCount))
+      .attr('fill', opts.nullColor);
+      
+    // Null symbol below bar
+    svg.append('text')
+      .attr('x', opts.marginLeft + nullBarWidth / 2)
+      .attr('y', opts.height - 2)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'system-ui, sans-serif')
+      .attr('font-size', '10px')
+      .attr('font-weight', 'normal')
+      .attr('fill', opts.nullColor)
+      .text('∅');
+  }
+  
+  // Background bars for date histogram (for context)
   svg.append('g')
     .attr('fill', opts.backgroundColor)
     .selectAll('rect')
@@ -158,7 +239,7 @@ export function createDateHistogram(bins, field, options = {}) {
     .attr('y', d => yScale(d.count))
     .attr('height', d => yScale(0) - yScale(d.count));
   
-  // Foreground bars (actual data)
+  // Foreground bars for date histogram (actual data)
   svg.append('g')
     .attr('fill', opts.fillColor)
     .selectAll('rect')
@@ -182,9 +263,9 @@ export function createDateHistogram(bins, field, options = {}) {
     [minVal, maxVal] = dateExtent;
   }
   
-  // Min label
+  // Min label (positioned after null bar space)
   svg.append('text')
-    .attr('x', opts.marginLeft)
+    .attr('x', opts.marginLeft + totalNullSpace)
     .attr('y', opts.height - 2)
     .attr('text-anchor', 'start')
     .attr('font-family', 'system-ui, sans-serif')
@@ -227,6 +308,66 @@ function createEmptyHistogram(opts) {
     .attr('font-size', '11px')
     .attr('fill', opts.textColor)
     .text('No data');
+  
+  return svg.node();
+}
+
+/**
+ * Create a histogram with only null values
+ * @param {number} nullCount - Number of null values
+ * @param {Object} opts - Rendering options
+ * @returns {SVGElement}
+ */
+function createNullOnlyHistogram(nullCount, opts) {
+  const nullBarWidth = 5;
+  const yScale = d3.scaleLinear()
+    .domain([0, nullCount])
+    .range([opts.height - opts.marginBottom, opts.marginTop]);
+  
+  const svg = d3.create('svg')
+    .attr('width', opts.width)
+    .attr('height', opts.height)
+    .attr('viewBox', [0, 0, opts.width, opts.height])
+    .style('max-width', '100%')
+    .style('height', 'auto');
+  
+  // Background null bar
+  svg.append('rect')
+    .attr('x', opts.marginLeft)
+    .attr('width', nullBarWidth)
+    .attr('y', yScale(nullCount))
+    .attr('height', yScale(0) - yScale(nullCount))
+    .attr('fill', opts.backgroundColor);
+    
+  // Foreground null bar (gold color)
+  svg.append('rect')
+    .attr('x', opts.marginLeft)
+    .attr('width', nullBarWidth)
+    .attr('y', yScale(nullCount))
+    .attr('height', yScale(0) - yScale(nullCount))
+    .attr('fill', opts.nullColor);
+    
+  // Null symbol below bar
+  svg.append('text')
+    .attr('x', opts.marginLeft + nullBarWidth / 2)
+    .attr('y', opts.height - 2)
+    .attr('text-anchor', 'middle')
+    .attr('font-family', 'system-ui, sans-serif')
+    .attr('font-size', '10px')
+    .attr('font-weight', 'normal')
+    .attr('fill', opts.nullColor)
+    .text('∅');
+  
+  // "All null" label 
+  svg.append('text')
+    .attr('x', opts.marginLeft + nullBarWidth + 10)
+    .attr('y', opts.height / 2)
+    .attr('text-anchor', 'start')
+    .attr('dominant-baseline', 'middle')
+    .attr('font-family', 'system-ui, sans-serif')
+    .attr('font-size', '11px')
+    .attr('fill', opts.textColor)
+    .text('All null');
   
   return svg.node();
 }

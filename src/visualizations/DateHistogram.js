@@ -16,9 +16,9 @@ export class DateHistogram extends ColumnVisualization {
   }
   
   /**
-   * Generate SQL query for temporal histogram bins
+   * Generate SQL query for temporal histogram bins including null count
    * @param {Array} filter - Filter expressions to apply
-   * @returns {Query} Temporal binning query for this column
+   * @returns {Query} Temporal binning query for this column with null handling
    */
   query(filter = []) {
     if (!this.fieldInfo) {
@@ -29,16 +29,30 @@ export class DateHistogram extends ColumnVisualization {
     const { min, max } = this.fieldInfo;
     
     if (min == null || max == null || min === max) {
-      // Handle edge case with no range
-      return Query
+      // Handle edge case with no range - still include null count
+      const validQuery = Query
         .from(this.table)
         .select({
           x0: sql`${min}`,
           x1: sql`${min}`,
-          count: count()
+          count: count(),
+          is_null: sql`false`
         })
         .where(filter)
         .where(sql`${this.column} IS NOT NULL`);
+        
+      const nullQuery = Query
+        .from(this.table)
+        .select({
+          x0: sql`NULL`,
+          x1: sql`NULL`,
+          count: count(),
+          is_null: sql`true`
+        })
+        .where(filter)
+        .where(sql`${this.column} IS NULL`);
+        
+      return Query.unionAll(validQuery, nullQuery);
     }
     
     // Determine appropriate temporal binning based on date range
@@ -60,17 +74,33 @@ export class DateHistogram extends ColumnVisualization {
       interval = sql`DATE_TRUNC('year', ${this.column})`;
     }
     
-    return Query
+    // Query for regular temporal bins
+    const binQuery = Query
       .from(this.table)
       .select({
         x0: interval,
         x1: interval, // For dates, x0 and x1 are the same (period start)
-        count: count()
+        count: count(),
+        is_null: sql`false`
       })
       .where(filter)
       .where(sql`${this.column} IS NOT NULL`)
-      .groupby(interval)
-      .orderby(interval);
+      .groupby(interval);
+    
+    // Query for null values (includes NULL, invalid dates, etc.)
+    const nullQuery = Query
+      .from(this.table)
+      .select({
+        x0: sql`NULL`,
+        x1: sql`NULL`,
+        count: count(),
+        is_null: sql`true`
+      })
+      .where(filter)
+      .where(sql`${this.column} IS NULL`);
+    
+    // Combine both queries with UNION ALL
+    return Query.unionAll(binQuery, nullQuery);
   }
   
   /**
@@ -80,12 +110,28 @@ export class DateHistogram extends ColumnVisualization {
   render(data) {
     try {
       // Convert Arrow table to JavaScript array if needed
-      let bins = [];
+      let allBins = [];
       if (data && typeof data.toArray === 'function') {
-        bins = data.toArray();
+        allBins = data.toArray();
       } else if (Array.isArray(data)) {
-        bins = data;
+        allBins = data;
       }
+      
+      // Separate null count from regular bins
+      let nullCount = 0;
+      let regularBins = [];
+      
+      allBins.forEach(bin => {
+        if (bin.is_null === true || bin.x0 === null || bin.x1 === null) {
+          nullCount = bin.count;
+        } else {
+          regularBins.push({
+            x0: bin.x0,
+            x1: bin.x1,
+            count: bin.count
+          });
+        }
+      });
       
       // Pass actual min/max from fieldInfo for accurate display
       const actualRange = this.fieldInfo ? {
@@ -93,11 +139,12 @@ export class DateHistogram extends ColumnVisualization {
         max: this.fieldInfo.max
       } : null;
       
-      // Create date histogram visualization
-      const histogramSVG = createDateHistogram(bins, this.field, {
+      // Create date histogram visualization with null count
+      const histogramSVG = createDateHistogram(regularBins, this.field, {
         width: 125,
         height: 40,
-        actualRange
+        actualRange,
+        nullCount
       });
       
       // Clear container and add histogram
