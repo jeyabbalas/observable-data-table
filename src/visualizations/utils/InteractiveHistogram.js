@@ -195,6 +195,69 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
     maxVal = maxVal instanceof Date ? maxVal : new Date(maxVal);
   }
   
+  // Calculate dynamic font size and format to prevent overlap
+  const availableWidth = opts.width - opts.marginLeft - opts.marginRight - totalNullSpace;
+
+  // Create adaptive date formatter based on available space
+  const createAdaptiveDateFormatter = (value, size) => {
+    if (scaleType !== 'time' || !(value instanceof Date)) {
+      return formatValue(value);
+    }
+
+    switch (size) {
+      case 'large':  // 10px font
+        return d3.timeFormat('%b %d, %Y')(value);
+      case 'medium': // 9px font
+        return d3.timeFormat('%b %d, %y')(value);
+      case 'small':  // 8px font
+        return d3.timeFormat('%m/%d/%y')(value);
+      case 'tiny':   // 7px font
+        return d3.timeFormat('%m/%y')(value);
+      default:
+        return d3.timeFormat('%b %d, %Y')(value);
+    }
+  };
+
+  // Try different sizes and formats until we find one that fits
+  let fontSize = '10px';
+  let sizeKey = 'large';
+  let minText = createAdaptiveDateFormatter(minVal, sizeKey);
+  let maxText = createAdaptiveDateFormatter(maxVal, sizeKey);
+
+  // Better text width estimation (7px per char for dates, 6px for numbers)
+  const charWidth = scaleType === 'time' ? 7 : 6;
+  let estimatedMinWidth = minText.length * charWidth;
+  let estimatedMaxWidth = maxText.length * charWidth;
+  let totalTextWidth = estimatedMinWidth + estimatedMaxWidth;
+
+  // Try smaller sizes if text doesn't fit (use 70% of available space for safety)
+  if (totalTextWidth > availableWidth * 0.7) {
+    fontSize = '9px';
+    sizeKey = 'medium';
+    minText = createAdaptiveDateFormatter(minVal, sizeKey);
+    maxText = createAdaptiveDateFormatter(maxVal, sizeKey);
+    estimatedMinWidth = minText.length * (charWidth * 0.9); // 9px is 90% of 10px
+    estimatedMaxWidth = maxText.length * (charWidth * 0.9);
+    totalTextWidth = estimatedMinWidth + estimatedMaxWidth;
+  }
+
+  if (totalTextWidth > availableWidth * 0.7) {
+    fontSize = '8px';
+    sizeKey = 'small';
+    minText = createAdaptiveDateFormatter(minVal, sizeKey);
+    maxText = createAdaptiveDateFormatter(maxVal, sizeKey);
+    estimatedMinWidth = minText.length * (charWidth * 0.8); // 8px is 80% of 10px
+    estimatedMaxWidth = maxText.length * (charWidth * 0.8);
+    totalTextWidth = estimatedMinWidth + estimatedMaxWidth;
+  }
+
+  if (totalTextWidth > availableWidth * 0.7) {
+    fontSize = '7px';
+    sizeKey = 'tiny';
+    minText = createAdaptiveDateFormatter(minVal, sizeKey);
+    maxText = createAdaptiveDateFormatter(maxVal, sizeKey);
+  }
+
   // Min label
   svg.append('text')
     .attr('class', 'min-label')
@@ -202,10 +265,10 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
     .attr('y', opts.height - 2)
     .attr('text-anchor', 'start')
     .attr('font-family', 'system-ui, sans-serif')
-    .attr('font-size', '10px')
+    .attr('font-size', fontSize)
     .attr('fill', opts.textColor)
-    .text(formatValue(minVal));
-  
+    .text(minText);
+
   // Max label
   svg.append('text')
     .attr('class', 'max-label')
@@ -213,9 +276,9 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
     .attr('y', opts.height - 2)
     .attr('text-anchor', 'end')
     .attr('font-family', 'system-ui, sans-serif')
-    .attr('font-size', '10px')
+    .attr('font-size', fontSize)
     .attr('fill', opts.textColor)
-    .text(formatValue(maxVal));
+    .text(maxText);
   
   // X-axis value label (follows cursor) - created after min/max for proper z-ordering
   valueLabel = svg.append('g').attr('class', 'value-label').style('display', 'none');

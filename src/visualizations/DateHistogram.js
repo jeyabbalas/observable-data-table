@@ -467,10 +467,9 @@ export class DateHistogram extends ColumnVisualization {
       // Calculate and store actual total count for proportion calculations
       this.actualTotalCount = regularBins.reduce((sum, bin) => sum + bin.count, 0) + nullCount;
 
-      // Initialize external stats display with total count and date range
+      // Initialize external stats display with total count only
       if (this.statsDisplay) {
-        const dateRange = this.formatDateRange(this.fieldInfo.min, this.fieldInfo.max);
-        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows, ${dateRange}`;
+        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows`;
       }
 
       if (this.interactive) {
@@ -584,9 +583,8 @@ export class DateHistogram extends ColumnVisualization {
           this.statsDisplay.textContent = `${count.toLocaleString()} ${label}${count === 1 ? '' : 's'} (${percentage.toFixed(1)}%)`;
         }
       } else {
-        // Reset to total count and date range
-        const dateRange = this.formatDateRange(this.fieldInfo.min, this.fieldInfo.max);
-        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows, ${dateRange}`;
+        // Reset to total count only
+        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows`;
       }
     }
   }
@@ -602,28 +600,41 @@ export class DateHistogram extends ColumnVisualization {
     switch (this.temporalType) {
       case 'TIME':
         // Format as hour range
-        const hour = Math.floor(bin.x0);
-        return `${hour}:00 - ${hour + 1}:00: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
+        const startHour = Math.floor(bin.x0);
+        const endHour = Math.floor(bin.x1);
+        return `${startHour}:00 - ${endHour}:00: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
 
       case 'INTERVAL':
-        // Format as duration
-        const seconds = bin.x0;
-        const duration = this.formatDuration(seconds);
-        return `${duration}: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
+        // Format as duration range
+        const startDuration = this.formatDuration(bin.x0);
+        const endDuration = this.formatDuration(bin.x1);
+        return `${startDuration} - ${endDuration}: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
 
       case 'DATE':
       case 'TIMESTAMP':
       default:
-        // Format based on optimal interval
-        if (this.optimalInterval) {
-          const formattedRange = this.formatTemporalRange(bin.x0, this.optimalInterval);
-          return `${formattedRange}: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
-        } else {
-          // Fallback formatting
-          const date = new Date(bin.x0);
-          const formattedDate = date.toLocaleDateString();
-          return `${formattedDate}: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
+        // bin.x0 and bin.x1 are already Date objects (converted in render method)
+        const startDate = bin.x0;
+        const endDate = bin.x1;
+        const span = endDate - startDate;
+
+        let rangeText;
+        if (span < 86400000) { // Less than a day - show time range
+          const dateStr = startDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          const startTime = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const endTime = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          rangeText = `${dateStr} ${startTime} - ${endTime}`;
+        } else if (span < 2629746000) { // Less than a month - show date range
+          const startDateStr = startDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          const endDateStr = endDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+          rangeText = `${startDateStr} - ${endDateStr}`;
+        } else { // Month or larger - show month/year range
+          const startStr = startDate.toLocaleDateString([], { month: 'short', year: 'numeric' });
+          const endStr = endDate.toLocaleDateString([], { month: 'short', year: 'numeric' });
+          rangeText = `${startStr} - ${endStr}`;
         }
+
+        return `${rangeText}: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
     }
   }
 
