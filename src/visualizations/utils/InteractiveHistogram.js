@@ -14,6 +14,7 @@ const DEFAULT_OPTIONS = {
   backgroundColor: '#d1d5db',   // Gray-300
   textColor: '#6b7280',        // Gray-500
   nullColor: '#f59e0b',        // Amber-500 (gold for nulls)
+  nullHoverColor: '#fbbf24',   // Amber-400 (brighter gold for hover)
   barPadding: 1,               // Padding between bars in pixels
   selectionColor: '#1d4ed8',   // Darker blue for selection
   fadeOpacity: 0.3,            // Opacity for non-selected elements
@@ -84,9 +85,10 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   
   // Render null bar if present
   let nullBarGroup = null;
+  let nullBarRect = null;
   if (nullCount > 0) {
     nullBarGroup = svg.append('g').attr('class', 'null-bars');
-    
+
     // Background null bar
     nullBarGroup.append('rect')
       .attr('class', 'null-bg')
@@ -95,9 +97,9 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
       .attr('y', yScale(nullCount))
       .attr('height', yScale(0) - yScale(nullCount))
       .attr('fill', opts.backgroundColor);
-      
-    // Foreground null bar (gold color) with hover functionality
-    nullBarGroup.append('rect')
+
+    // Foreground null bar (gold color) - store reference for hover effects
+    nullBarRect = nullBarGroup.append('rect')
       .attr('class', 'null-fg')
       .attr('x', opts.marginLeft)
       .attr('width', nullBarWidth)
@@ -105,16 +107,6 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
       .attr('height', yScale(0) - yScale(nullCount))
       .attr('fill', opts.nullColor)
       .style('cursor', 'pointer')
-      .on('mouseenter', function() {
-        if (onHover) {
-          onHover({ count: nullCount, bin: null, isNull: true });
-        }
-      })
-      .on('mouseleave', function() {
-        if (onHover) {
-          onHover(null);
-        }
-      })
       .on('click', function() {
         if (onSelectionChange) {
           onSelectionChange('null', true);
@@ -245,6 +237,30 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
     .style('cursor', 'crosshair')
     .on('mousemove', onMouseMove)
     .on('mouseleave', onMouseLeave);
+
+  // Add hover area for null bar if present
+  let nullHoverArea = null;
+  if (nullCount > 0) {
+    nullHoverArea = svg.append('rect')
+      .attr('class', 'null-hover-overlay')
+      .attr('x', opts.marginLeft)
+      .attr('y', opts.marginTop)
+      .attr('width', nullBarWidth)
+      .attr('height', opts.height - opts.marginTop - opts.marginBottom)
+      .attr('fill', 'transparent')
+      .style('cursor', 'pointer')
+      .on('mouseenter', function() {
+        updateHoverState('null');
+      })
+      .on('mouseleave', function() {
+        updateHoverState(null);
+      })
+      .on('click', function() {
+        if (onSelectionChange) {
+          onSelectionChange('null', true);
+        }
+      });
+  }
   
   // Brush event handlers
   function onBrushStart(event) {
@@ -345,23 +361,60 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   function updateVisualHover() {
     if (hoveredValue === null) {
       valueLabel.style('display', 'none');
+      // Remove highlighting from all bars
+      foregroundBars.attr('fill', opts.fillColor);
+      // Reset null bar color if it exists
+      if (nullBarRect) {
+        nullBarRect.attr('fill', opts.nullColor);
+      }
       // Update external stats display if provided
       if (statsDisplay) {
         statsDisplay.textContent = `${totalCount.toLocaleString()} rows`;
       }
       return;
     }
-    
+
+    // Check if hovering over null bar
+    if (hoveredValue === 'null') {
+      valueLabel.style('display', 'none');
+      // Remove highlighting from regular bars
+      foregroundBars.attr('fill', opts.fillColor);
+      // Highlight null bar
+      if (nullBarRect) {
+        nullBarRect.attr('fill', opts.nullHoverColor);
+      }
+      // Update external stats display for null bar
+      if (statsDisplay && onHover) {
+        onHover({ count: nullCount, bin: null, isNull: true });
+      }
+      return;
+    }
+
     const hoverData = getHoverData(hoveredValue);
     if (!hoverData) {
       valueLabel.style('display', 'none');
+      // Remove highlighting from all bars
+      foregroundBars.attr('fill', opts.fillColor);
+      // Reset null bar color if it exists
+      if (nullBarRect) {
+        nullBarRect.attr('fill', opts.nullColor);
+      }
       // Update external stats display if provided
       if (statsDisplay) {
         statsDisplay.textContent = `${totalCount.toLocaleString()} rows`;
       }
       return;
     }
-    
+
+    // Highlight the hovered regular bar
+    foregroundBars.attr('fill', d =>
+      d === hoverData.bin ? '#60a5fa' : opts.fillColor
+    );
+    // Reset null bar color when hovering regular bars
+    if (nullBarRect) {
+      nullBarRect.attr('fill', opts.nullColor);
+    }
+
     // Update external stats display if provided
     if (statsDisplay) {
       const percentage = ((hoverData.count / totalCount) * 100).toFixed(1);

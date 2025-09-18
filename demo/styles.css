@@ -794,7 +794,7 @@ body {
 
 /* Histogram Interaction States */
 .column-viz .foreground-bars rect {
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease, fill 0.2s ease;
 }
 
 .column-viz .foreground-bars rect:hover {

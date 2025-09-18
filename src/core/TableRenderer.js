@@ -223,7 +223,7 @@ export class TableRenderer extends MosaicClient {
       statsDisplay.style.fontSize = '10px';
       statsDisplay.style.color = '#666';
       statsDisplay.style.fontWeight = '500';
-      statsDisplay.style.minHeight = '6px';
+      statsDisplay.style.minHeight = '32px';
       statsDisplay.style.marginBottom = '0px';
       statsDisplay.style.textAlign = 'center';
       headerContent.appendChild(statsDisplay);

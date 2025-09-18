@@ -183,16 +183,23 @@ export class InteractionHandler {
    */
   formatNumericValue(value) {
     if (value == null || isNaN(value)) return 'N/A';
-    
+
+    const absValue = Math.abs(value);
+
     // Use different formatting based on magnitude
-    if (Math.abs(value) >= 1000000) {
+    if (absValue >= 1000000) {
       return d3.format('.2s')(value); // SI notation for large numbers
-    } else if (Math.abs(value) >= 1000) {
+    } else if (absValue >= 1000) {
       return d3.format(',.0f')(value); // Comma separated for thousands
-    } else if (Math.abs(value) % 1 === 0) {
+    } else if (absValue % 1 === 0) {
       return value.toString(); // Integer as-is
+    } else if (absValue >= 10) {
+      return d3.format('.1f')(value); // One decimal place for values >= 10
+    } else if (absValue >= 0.1) {
+      return d3.format('.1f')(value); // One decimal place for values 0.1-10
     } else {
-      return d3.format('.2f')(value); // Two decimal places for floats
+      // For very small values, show significant digits
+      return d3.format('.3g')(value); // Up to 3 significant digits
     }
   }
   

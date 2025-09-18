@@ -3,7 +3,7 @@ import { Query, count, sql } from '@uwdata/mosaic-sql';
 import { ColumnVisualization } from './ColumnVisualization.js';
 import { createHistogram } from './utils/HistogramRenderer.js';
 import { createInteractiveHistogram } from './utils/InteractiveHistogram.js';
-import { createInteractionHandler } from './utils/InteractionHandler.js';
+import { createInteractionHandler, InteractionHandler } from './utils/InteractionHandler.js';
 
 /**
  * Numeric histogram visualization for continuous data columns
@@ -41,7 +41,44 @@ export class Histogram extends ColumnVisualization {
       });
     }
   }
-  
+
+  /**
+   * Override prepare to calculate quartiles for Freedman-Diaconis rule
+   */
+  async prepare() {
+    try {
+      // First call parent prepare to get basic field info
+      await super.prepare();
+
+      // Then calculate quartiles using SQL query
+      if (this.coordinator && this.fieldInfo) {
+        const quartileQuery = Query
+          .from(this.table)
+          .select({
+            q1: sql`QUANTILE(${this.column}, 0.25)`,
+            q3: sql`QUANTILE(${this.column}, 0.75)`,
+            count: sql`COUNT(${this.column})`
+          })
+          .where(sql`${this.column} IS NOT NULL`);
+
+        const quartileResult = await this.coordinator.query(quartileQuery);
+
+        if (quartileResult && quartileResult.length > 0) {
+          const quartileData = Array.isArray(quartileResult) ? quartileResult[0] : quartileResult.toArray()[0];
+          this.q1 = quartileData.q1;
+          this.q3 = quartileData.q3;
+          this.nonNullCount = quartileData.count;
+        }
+      }
+
+      return this;
+    } catch (error) {
+      console.error(`Failed to prepare histogram for ${this.column}:`, error);
+      // Continue without quartiles if calculation fails
+      return this;
+    }
+  }
+
   /**
    * Generate SQL query for histogram bins including null count
    * @param {Array} filter - Filter expressions to apply
@@ -52,9 +89,9 @@ export class Histogram extends ColumnVisualization {
       // Fallback query if field info not available yet
       return super.query(filter);
     }
-    
+
     const { min, max } = this.fieldInfo;
-    
+
     if (min == null || max == null || min === max) {
       // Handle edge case with no range - still include null count
       const validQuery = Query
@@ -67,7 +104,7 @@ export class Histogram extends ColumnVisualization {
         })
         .where(filter)
         .where(sql`${this.column} IS NOT NULL`);
-        
+
       const nullQuery = Query
         .from(this.table)
         .select({
@@ -78,12 +115,34 @@ export class Histogram extends ColumnVisualization {
         })
         .where(filter)
         .where(sql`${this.column} IS NULL`);
-        
+
       return Query.unionAll(validQuery, nullQuery);
     }
-    
+
+    // Calculate number of bins using Freedman-Diaconis rule
+    let numBins;
+
+    if (this.q1 != null && this.q3 != null && this.nonNullCount != null) {
+      const IQR = this.q3 - this.q1;
+      const n = this.nonNullCount; // Non-null count
+
+      if (IQR > 0 && n > 0) {
+        const binWidth = 2 * IQR / Math.pow(n, 1/3);
+        numBins = Math.ceil((max - min) / binWidth);
+      } else {
+        // Fall back to Sturges' formula if IQR is 0
+        numBins = Math.ceil(1 + Math.log2(n));
+      }
+
+      // Clamp to reasonable range
+      numBins = Math.max(5, Math.min(100, numBins));
+    } else {
+      // Fall back to default if quartiles unavailable
+      numBins = this.bins;
+    }
+
     // Calculate bin width
-    const binWidth = (max - min) / this.bins;
+    const binWidth = (max - min) / numBins;
     
     // Query for regular histogram bins
     const binQuery = Query
@@ -255,8 +314,20 @@ export class Histogram extends ColumnVisualization {
       if (hoverData) {
         const { count, bin, isNull } = hoverData;
         const percentage = (count / this.actualTotalCount) * 100;
-        const label = isNull ? 'null value' : 'row';
-        this.statsDisplay.textContent = `${count.toLocaleString()} ${label}${count === 1 ? '' : 's'} (${percentage.toFixed(1)}%)`;
+
+        if (isNull) {
+          const label = 'null value';
+          this.statsDisplay.textContent = `${count.toLocaleString()} ${label}${count === 1 ? '' : 's'} (${percentage.toFixed(1)}%)`;
+        } else if (bin && bin.x0 != null && bin.x1 != null) {
+          // Create a temporary InteractionHandler instance for formatting
+          const formatter = new InteractionHandler();
+          const formattedX0 = formatter.formatNumericValue(bin.x0);
+          const formattedX1 = formatter.formatNumericValue(bin.x1);
+          this.statsDisplay.textContent = `[${formattedX0}..${formattedX1}]: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
+        } else {
+          const label = 'row';
+          this.statsDisplay.textContent = `${count.toLocaleString()} ${label}${count === 1 ? '' : 's'} (${percentage.toFixed(1)}%)`;
+        }
       } else {
         // Reset to total count
         this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows`;
