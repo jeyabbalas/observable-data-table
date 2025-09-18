@@ -1,0 +1,302 @@
+[
+  {
+    "id": 1,
+    "date_column": "2024-01-15",
+    "timestamp_column": "2024-01-15T14:30:00",
+    "datetime_column": "2024-01-15T14:30:00",
+    "time_column": "14:30:00",
+    "date_past": "1969-10-17",
+    "date_future": "2025-06-15",
+    "timestamp_ms": "2024-01-15T14:30:12.345Z"
+  },
+  {
+    "id": 2,
+    "date_column": "2024-01-16",
+    "timestamp_column": "2024-01-16T09:15:30",
+    "datetime_column": "2024-01-16T09:15:30",
+    "time_column": "09:15:30",
+    "date_past": "1970-05-22",
+    "date_future": "2025-07-20",
+    "timestamp_ms": "2024-01-16T09:15:45.678Z"
+  },
+  {
+    "id": 3,
+    "date_column": "2024-01-17",
+    "timestamp_column": "2024-01-17T18:45:15",
+    "datetime_column": "2024-01-17T18:45:15",
+    "time_column": "18:45:15",
+    "date_past": "1971-12-03",
+    "date_future": "2026-01-10",
+    "timestamp_ms": "2024-01-17T18:45:23.901Z"
+  },
+  {
+    "id": 4,
+    "date_column": null,
+    "timestamp_column": null,
+    "datetime_column": null,
+    "time_column": null,
+    "date_past": null,
+    "date_future": "2026-02-14",
+    "timestamp_ms": null
+  },
+  {
+    "id": 5,
+    "date_column": "2024-01-19",
+    "timestamp_column": "2024-01-19T12:00:00",
+    "datetime_column": "2024-01-19T12:00:00",
+    "time_column": "12:00:00",
+    "date_past": "1973-08-14",
+    "date_future": "2026-03-25",
+    "timestamp_ms": "2024-01-19T12:00:34.567Z"
+  },
+  {
+    "id": 6,
+    "date_column": "2024-01-20",
+    "timestamp_column": "2024-01-20T16:30:45",
+    "datetime_column": "2024-01-20T16:30:45",
+    "time_column": "16:30:45",
+    "date_past": null,
+    "date_future": "2026-04-30",
+    "timestamp_ms": "2024-01-20T16:30:56.789Z"
+  },
+  {
+    "id": 7,
+    "date_column": "2024-02-01",
+    "timestamp_column": "2024-02-01T08:20:00",
+    "datetime_column": "2024-02-01T08:20:00",
+    "time_column": "08:20:00",
+    "date_past": "1975-03-07",
+    "date_future": "2026-05-18",
+    "timestamp_ms": "2024-02-01T08:20:12.234Z"
+  },
+  {
+    "id": 8,
+    "date_column": "2024-02-02",
+    "timestamp_column": "2024-02-02T19:10:30",
+    "datetime_column": "2024-02-02T19:10:30",
+    "time_column": "19:10:30",
+    "date_past": "1976-09-25",
+    "date_future": null,
+    "timestamp_ms": "2024-02-02T19:10:45.567Z"
+  },
+  {
+    "id": 9,
+    "date_column": null,
+    "timestamp_column": null,
+    "datetime_column": null,
+    "time_column": null,
+    "date_past": null,
+    "date_future": "2026-07-22",
+    "timestamp_ms": null
+  },
+  {
+    "id": 10,
+    "date_column": "2024-02-04",
+    "timestamp_column": "2024-02-04T11:45:15",
+    "datetime_column": "2024-02-04T11:45:15",
+    "time_column": "11:45:15",
+    "date_past": "1978-01-12",
+    "date_future": "2026-08-30",
+    "timestamp_ms": "2024-02-04T11:45:23.890Z"
+  },
+  {
+    "id": 11,
+    "date_column": "2024-02-05",
+    "timestamp_column": "2024-02-05T13:25:00",
+    "datetime_column": "2024-02-05T13:25:00",
+    "time_column": "13:25:00",
+    "date_past": "1979-06-18",
+    "date_future": "2027-01-15",
+    "timestamp_ms": "2024-02-05T13:25:34.123Z"
+  },
+  {
+    "id": 12,
+    "date_column": "2024-03-01",
+    "timestamp_column": "2024-03-01T07:00:00",
+    "datetime_column": "2024-03-01T07:00:00",
+    "time_column": "07:00:00",
+    "date_past": null,
+    "date_future": "2027-02-20",
+    "timestamp_ms": "2024-03-01T07:00:45.456Z"
+  },
+  {
+    "id": 13,
+    "date_column": "2024-03-02",
+    "timestamp_column": "2024-03-02T20:30:45",
+    "datetime_column": "2024-03-02T20:30:45",
+    "time_column": "20:30:45",
+    "date_past": "1981-04-09",
+    "date_future": "2027-03-28",
+    "timestamp_ms": "2024-03-02T20:30:56.789Z"
+  },
+  {
+    "id": 14,
+    "date_column": null,
+    "timestamp_column": "2024-03-03T14:15:30",
+    "datetime_column": null,
+    "time_column": "14:15:30",
+    "date_past": "1982-11-23",
+    "date_future": null,
+    "timestamp_ms": "2024-03-03T14:15:12.345Z"
+  },
+  {
+    "id": 15,
+    "date_column": "2024-03-04",
+    "timestamp_column": "2024-03-04T10:50:00",
+    "datetime_column": "2024-03-04T10:50:00",
+    "time_column": "10:50:00",
+    "date_past": "1983-07-06",
+    "date_future": "2027-05-10",
+    "timestamp_ms": "2024-03-04T10:50:23.678Z"
+  },
+  {
+    "id": 16,
+    "date_column": "2024-04-01",
+    "timestamp_column": "2024-04-01T15:30:15",
+    "datetime_column": "2024-04-01T15:30:15",
+    "time_column": "15:30:15",
+    "date_past": "1984-02-14",
+    "date_future": "2027-06-25",
+    "timestamp_ms": "2024-04-01T15:30:34.901Z"
+  },
+  {
+    "id": 17,
+    "date_column": "2024-04-02",
+    "timestamp_column": "2024-04-02T09:45:00",
+    "datetime_column": "2024-04-02T09:45:00",
+    "time_column": "09:45:00",
+    "date_past": null,
+    "date_future": "2027-07-30",
+    "timestamp_ms": "2024-04-02T09:45:45.234Z"
+  },
+  {
+    "id": 18,
+    "date_column": "2024-04-03",
+    "timestamp_column": "2024-04-03T17:20:30",
+    "datetime_column": "2024-04-03T17:20:30",
+    "time_column": "17:20:30",
+    "date_past": "1986-10-28",
+    "date_future": "2027-08-15",
+    "timestamp_ms": "2024-04-03T17:20:56.567Z"
+  },
+  {
+    "id": 19,
+    "date_column": null,
+    "timestamp_column": null,
+    "datetime_column": null,
+    "time_column": "22:15:45",
+    "date_past": "1987-05-16",
+    "date_future": null,
+    "timestamp_ms": null
+  },
+  {
+    "id": 20,
+    "date_column": "2024-04-05",
+    "timestamp_column": "2024-04-05T12:35:00",
+    "datetime_column": "2024-04-05T12:35:00",
+    "time_column": "12:35:00",
+    "date_past": "1988-12-01",
+    "date_future": "2028-01-20",
+    "timestamp_ms": "2024-04-05T12:35:12.890Z"
+  },
+  {
+    "id": 21,
+    "date_column": "2024-05-01",
+    "timestamp_column": "2024-05-01T08:10:15",
+    "datetime_column": "2024-05-01T08:10:15",
+    "time_column": "08:10:15",
+    "date_past": "1989-08-19",
+    "date_future": "2028-02-28",
+    "timestamp_ms": "2024-05-01T08:10:23.123Z"
+  },
+  {
+    "id": 22,
+    "date_column": "2024-05-02",
+    "timestamp_column": "2024-05-02T19:55:00",
+    "datetime_column": "2024-05-02T19:55:00",
+    "time_column": "19:55:00",
+    "date_past": "1990-03-11",
+    "date_future": null,
+    "timestamp_ms": "2024-05-02T19:55:34.456Z"
+  },
+  {
+    "id": 23,
+    "date_column": "2024-05-03",
+    "timestamp_column": null,
+    "datetime_column": "2024-05-03T11:25:30",
+    "time_column": "11:25:30",
+    "date_past": null,
+    "date_future": "2028-04-15",
+    "timestamp_ms": "2024-05-03T11:25:45.789Z"
+  },
+  {
+    "id": 24,
+    "date_column": "2024-06-01",
+    "timestamp_column": "2024-06-01T16:40:45",
+    "datetime_column": "2024-06-01T16:40:45",
+    "time_column": "16:40:45",
+    "date_past": "1992-06-27",
+    "date_future": "2028-05-20",
+    "timestamp_ms": "2024-06-01T16:40:56.012Z"
+  },
+  {
+    "id": 25,
+    "date_column": "2024-06-02",
+    "timestamp_column": "2024-06-02T13:15:00",
+    "datetime_column": "2024-06-02T13:15:00",
+    "time_column": null,
+    "date_past": "1993-01-08",
+    "date_future": "2028-06-30",
+    "timestamp_ms": "2024-06-02T13:15:12.345Z"
+  },
+  {
+    "id": 26,
+    "date_column": null,
+    "timestamp_column": "2024-06-03T21:30:30",
+    "datetime_column": "2024-06-03T21:30:30",
+    "time_column": "21:30:30",
+    "date_past": null,
+    "date_future": "2028-07-25",
+    "timestamp_ms": null
+  },
+  {
+    "id": 27,
+    "date_column": "2024-06-04",
+    "timestamp_column": "2024-06-04T06:45:15",
+    "datetime_column": "2024-06-04T06:45:15",
+    "time_column": "06:45:15",
+    "date_past": "1995-09-14",
+    "date_future": "2028-08-10",
+    "timestamp_ms": "2024-06-04T06:45:23.678Z"
+  },
+  {
+    "id": 28,
+    "date_column": "2024-07-01",
+    "timestamp_column": "2024-07-01T18:20:00",
+    "datetime_column": "2024-07-01T18:20:00",
+    "time_column": "18:20:00",
+    "date_past": "1996-04-02",
+    "date_future": "2028-09-15",
+    "timestamp_ms": "2024-07-01T18:20:34.901Z"
+  },
+  {
+    "id": 29,
+    "date_column": "2024-07-02",
+    "timestamp_column": "2024-07-02T14:55:30",
+    "datetime_column": "2024-07-02T14:55:30",
+    "time_column": "14:55:30",
+    "date_past": null,
+    "date_future": "2028-10-20",
+    "timestamp_ms": "2024-07-02T14:55:45.234Z"
+  },
+  {
+    "id": 30,
+    "date_column": "2024-07-03",
+    "timestamp_column": "2024-07-03T10:10:45",
+    "datetime_column": "2024-07-03T10:10:45",
+    "time_column": "10:10:45",
+    "date_past": "1998-11-18",
+    "date_future": "2028-11-25",
+    "timestamp_ms": "2024-07-03T10:10:56.567Z"
+  }
+]
