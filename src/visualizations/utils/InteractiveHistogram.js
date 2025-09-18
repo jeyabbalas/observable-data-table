@@ -35,6 +35,7 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   const nullCount = options.nullCount || 0;
   const statsDisplay = options.statsDisplay || null;  // External stats display element
   const totalCount = options.totalCount || (bins.reduce((sum, bin) => sum + bin.count, 0) + nullCount);
+  const scaleType = options.scaleType || 'linear';  // 'linear', 'time'
   
   if (!bins || bins.length === 0) {
     if (nullCount > 0) {
@@ -48,14 +49,25 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   const nullBarGap = nullCount > 0 ? 4 : 0;
   const totalNullSpace = nullBarWidth + nullBarGap;
   
-  // Calculate scales
-  const xExtent = d3.extent(bins, d => d.x0).concat(d3.extent(bins, d => d.x1));
-  const xDomain = [Math.min(...xExtent), Math.max(...xExtent)];
+  // Calculate scales based on scale type
+  let xScale, xDomain;
   const yMax = Math.max(d3.max(bins, d => d.count) || 1, nullCount);
-  
-  const xScale = d3.scaleLinear()
-    .domain(xDomain)
-    .range([opts.marginLeft + totalNullSpace, opts.width - opts.marginRight]);
+
+  if (scaleType === 'time') {
+    // For time scales, convert to Date objects
+    const timeExtent = d3.extent(bins.map(d => [new Date(d.x0), new Date(d.x1)]).flat());
+    xDomain = timeExtent;
+    xScale = d3.scaleUtc()
+      .domain(xDomain)
+      .range([opts.marginLeft + totalNullSpace, opts.width - opts.marginRight]);
+  } else {
+    // Default linear scale
+    const xExtent = d3.extent(bins, d => d.x0).concat(d3.extent(bins, d => d.x1));
+    xDomain = [Math.min(...xExtent), Math.max(...xExtent)];
+    xScale = d3.scaleLinear()
+      .domain(xDomain)
+      .range([opts.marginLeft + totalNullSpace, opts.width - opts.marginRight]);
+  }
     
   const yScale = d3.scaleLinear()
     .domain([0, yMax])
@@ -134,8 +146,15 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   const backgroundBars = backgroundGroup.selectAll('rect')
     .data(bins)
     .join('rect')
-    .attr('x', d => xScale(d.x0) + opts.barPadding / 2)
-    .attr('width', d => Math.max(1, xScale(d.x1) - xScale(d.x0) - opts.barPadding))
+    .attr('x', d => {
+      const x0 = scaleType === 'time' ? new Date(d.x0) : d.x0;
+      return xScale(x0) + opts.barPadding / 2;
+    })
+    .attr('width', d => {
+      const x0 = scaleType === 'time' ? new Date(d.x0) : d.x0;
+      const x1 = scaleType === 'time' ? new Date(d.x1) : d.x1;
+      return Math.max(1, xScale(x1) - xScale(x0) - opts.barPadding);
+    })
     .attr('y', d => yScale(d.count))
     .attr('height', d => yScale(0) - yScale(d.count));
   
@@ -147,13 +166,20 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   const foregroundBars = foregroundGroup.selectAll('rect')
     .data(bins)
     .join('rect')
-    .attr('x', d => xScale(d.x0) + opts.barPadding / 2)
-    .attr('width', d => Math.max(1, xScale(d.x1) - xScale(d.x0) - opts.barPadding))
+    .attr('x', d => {
+      const x0 = scaleType === 'time' ? new Date(d.x0) : d.x0;
+      return xScale(x0) + opts.barPadding / 2;
+    })
+    .attr('width', d => {
+      const x0 = scaleType === 'time' ? new Date(d.x0) : d.x0;
+      const x1 = scaleType === 'time' ? new Date(d.x1) : d.x1;
+      return Math.max(1, xScale(x1) - xScale(x0) - opts.barPadding);
+    })
     .attr('y', d => yScale(d.count))
     .attr('height', d => yScale(0) - yScale(d.count));
   
   // Add min/max labels
-  const formatValue = getValueFormatter(field);
+  const formatValue = getValueFormatter(field, scaleType);
   let minVal, maxVal;
   
   if (options.actualRange) {
@@ -161,6 +187,12 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
     maxVal = options.actualRange.max;
   } else {
     [minVal, maxVal] = xDomain;
+  }
+
+  // Convert to appropriate format for time scales
+  if (scaleType === 'time') {
+    minVal = minVal instanceof Date ? minVal : new Date(minVal);
+    maxVal = maxVal instanceof Date ? maxVal : new Date(maxVal);
   }
   
   // Min label
@@ -305,9 +337,17 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
     
     const [mouseX] = d3.pointer(event, this);
     const dataValue = xScale.invert(mouseX);
-    
-    // Clamp to domain
-    const clampedValue = Math.max(xDomain[0], Math.min(xDomain[1], dataValue));
+
+    // Clamp to domain and handle time scales
+    let clampedValue;
+    if (scaleType === 'time') {
+      const minTime = xDomain[0].getTime();
+      const maxTime = xDomain[1].getTime();
+      const valueTime = dataValue.getTime();
+      clampedValue = new Date(Math.max(minTime, Math.min(maxTime, valueTime)));
+    } else {
+      clampedValue = Math.max(xDomain[0], Math.min(xDomain[1], dataValue));
+    }
     updateHoverState(clampedValue);
   }
   
@@ -423,7 +463,9 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
     
     // Update x-axis value label with improved white background
     const formattedValue = formatValue(hoveredValue);
-    const mouseX = xScale(hoveredValue);
+    const mouseX = scaleType === 'time' ?
+      xScale(hoveredValue instanceof Date ? hoveredValue : new Date(hoveredValue)) :
+      xScale(hoveredValue);
     
     // Position and size the label background with elegant minimal styling
     const textBBox = valueLabelText.text(formattedValue).node().getBBox();
@@ -443,19 +485,40 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   }
   
   function getHoverData(value) {
-    // Find the bin that contains this value
-    const bin = bins.find(b => value >= b.x0 && value < b.x1);
+    // Find the bin that contains this value, handling time scales
+    const bin = bins.find(b => {
+      if (scaleType === 'time') {
+        const valueTime = value instanceof Date ? value.getTime() : new Date(value).getTime();
+        const x0Time = new Date(b.x0).getTime();
+        const x1Time = new Date(b.x1).getTime();
+        return valueTime >= x0Time && valueTime < x1Time;
+      } else {
+        return value >= b.x0 && value < b.x1;
+      }
+    });
+
     if (bin) {
       return { count: bin.count, bin };
     }
-    
+
     // Check if value is very close to a bin edge (within 1% of domain)
-    const tolerance = (xDomain[1] - xDomain[0]) * 0.01;
-    const nearBin = bins.find(b => 
-      Math.abs(value - b.x0) < tolerance || Math.abs(value - b.x1) < tolerance
-    );
-    
-    return nearBin ? { count: nearBin.count, bin: nearBin } : null;
+    let tolerance;
+    if (scaleType === 'time') {
+      tolerance = (xDomain[1].getTime() - xDomain[0].getTime()) * 0.01;
+      const valueTime = value instanceof Date ? value.getTime() : new Date(value).getTime();
+      const nearBin = bins.find(b => {
+        const x0Time = new Date(b.x0).getTime();
+        const x1Time = new Date(b.x1).getTime();
+        return Math.abs(valueTime - x0Time) < tolerance || Math.abs(valueTime - x1Time) < tolerance;
+      });
+      return nearBin ? { count: nearBin.count, bin: nearBin } : null;
+    } else {
+      tolerance = (xDomain[1] - xDomain[0]) * 0.01;
+      const nearBin = bins.find(b =>
+        Math.abs(value - b.x0) < tolerance || Math.abs(value - b.x1) < tolerance
+      );
+      return nearBin ? { count: nearBin.count, bin: nearBin } : null;
+    }
   }
   
   // Public methods
@@ -632,13 +695,25 @@ function createEmptyInteractiveHistogram(opts) {
 }
 
 /**
- * Get appropriate value formatter based on field type
+ * Get appropriate value formatter based on field type and scale type
  */
-function getValueFormatter(field) {
+function getValueFormatter(field, scaleType = 'linear') {
   return (value) => {
-    if (value == null || isNaN(value)) return 'N/A';
-    
-    // Use SI format for numeric values
+    if (value == null) return 'N/A';
+
+    if (scaleType === 'time') {
+      // For time scales, format as date
+      if (value instanceof Date) {
+        return d3.timeFormat('%b %d, %Y')(value);
+      } else {
+        const date = new Date(value);
+        if (isNaN(date)) return 'N/A';
+        return d3.timeFormat('%b %d, %Y')(date);
+      }
+    }
+
+    // Default numeric formatting
+    if (isNaN(value)) return 'N/A';
     const format = d3.format('.2s');
     return format(value);
   };

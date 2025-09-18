@@ -496,7 +496,8 @@ export class TableRenderer extends MosaicClient {
           table: this.table,
           column: fieldName,
           field: mockField,
-          filterBy: this.filterBy
+          filterBy: this.filterBy,
+          statsDisplay: statsDisplay
         });
         
         // Connect to coordinator
