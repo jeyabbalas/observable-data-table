@@ -193,8 +193,8 @@ export class DateHistogram extends ColumnVisualization {
     const binQuery = Query
       .from(this.table)
       .select({
-        x0: sql`floor(${hourExtract} / ${binWidth}) * ${binWidth}`,
-        x1: sql`(floor(${hourExtract} / ${binWidth}) + 1) * ${binWidth}`,
+        x0: sql`LEAST(floor(${hourExtract} / ${binWidth}), ${numBins - 1}) * ${binWidth}`,
+        x1: sql`(LEAST(floor(${hourExtract} / ${binWidth}), ${numBins - 1}) + 1) * ${binWidth}`,
         count: count(),
         is_null: sql`false`
       })
@@ -279,8 +279,8 @@ export class DateHistogram extends ColumnVisualization {
     const binQuery = Query
       .from(this.table)
       .select({
-        x0: sql`floor((${columnSeconds} - ${minSeconds}) / ${binWidth}) * ${binWidth} + ${minSeconds}`,
-        x1: sql`(floor((${columnSeconds} - ${minSeconds}) / ${binWidth}) + 1) * ${binWidth} + ${minSeconds}`,
+        x0: sql`LEAST(floor((${columnSeconds} - ${minSeconds}) / ${binWidth}), ${numBins - 1}) * ${binWidth} + ${minSeconds}`,
+        x1: sql`(LEAST(floor((${columnSeconds} - ${minSeconds}) / ${binWidth}), ${numBins - 1}) + 1) * ${binWidth} + ${minSeconds}`,
         count: count(),
         is_null: sql`false`
       })
@@ -313,8 +313,8 @@ export class DateHistogram extends ColumnVisualization {
     const binQuery = Query
       .from(this.table)
       .select({
-        x0: sql`floor((${columnSeconds} - (SELECT MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL)) / ((SELECT MAX(${columnSeconds}) - MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL) / ${numBins})) * ((SELECT MAX(${columnSeconds}) - MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL) / ${numBins}) + (SELECT MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL)`,
-        x1: sql`(floor((${columnSeconds} - (SELECT MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL)) / ((SELECT MAX(${columnSeconds}) - MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL) / ${numBins})) + 1) * ((SELECT MAX(${columnSeconds}) - MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL) / ${numBins}) + (SELECT MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL)`,
+        x0: sql`LEAST(floor((${columnSeconds} - (SELECT MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL)) / ((SELECT MAX(${columnSeconds}) - MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL) / ${numBins})), ${numBins - 1}) * ((SELECT MAX(${columnSeconds}) - MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL) / ${numBins}) + (SELECT MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL)`,
+        x1: sql`(LEAST(floor((${columnSeconds} - (SELECT MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL)) / ((SELECT MAX(${columnSeconds}) - MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL) / ${numBins})), ${numBins - 1}) + 1) * ((SELECT MAX(${columnSeconds}) - MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL) / ${numBins}) + (SELECT MIN(${columnSeconds}) FROM ${this.table} WHERE ${this.column} IS NOT NULL)`,
         count: count(),
         is_null: sql`false`
       })
@@ -385,8 +385,8 @@ export class DateHistogram extends ColumnVisualization {
     const binQuery = Query
       .from(this.table)
       .select({
-        x0: sql`floor((${columnEpoch} - ${minEpoch}) / ${binWidth}) * ${binWidth} + ${minEpoch}`,
-        x1: sql`(floor((${columnEpoch} - ${minEpoch}) / ${binWidth}) + 1) * ${binWidth} + ${minEpoch}`,
+        x0: sql`LEAST(floor((${columnEpoch} - ${minEpoch}) / ${binWidth}), ${numBins - 1}) * ${binWidth} + ${minEpoch}`,
+        x1: sql`(LEAST(floor((${columnEpoch} - ${minEpoch}) / ${binWidth}), ${numBins - 1}) + 1) * ${binWidth} + ${minEpoch}`,
         count: count(),
         is_null: sql`false`
       })
