@@ -431,9 +431,17 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
   function updateHoverState(value) {
     hoveredValue = value;
     updateVisualHover();
-    
+
     if (onHover) {
-      const hoverData = value !== null ? getHoverData(value) : null;
+      let hoverData;
+      if (value === 'null') {
+        // Special case for null bar
+        hoverData = { count: nullCount, bin: null, isNull: true };
+      } else if (value !== null) {
+        hoverData = getHoverData(value);
+      } else {
+        hoverData = null;
+      }
       onHover(hoverData);
     }
   }
@@ -486,10 +494,7 @@ export function createInteractiveHistogram(bins, field, options = {}, onSelectio
       if (nullBarRect) {
         nullBarRect.attr('fill', opts.nullHoverColor);
       }
-      // Update external stats display for null bar
-      if (statsDisplay && onHover) {
-        onHover({ count: nullCount, bin: null, isNull: true });
-      }
+      // Visual update for null bar hover (onHover is now handled in updateHoverState)
       return;
     }
 

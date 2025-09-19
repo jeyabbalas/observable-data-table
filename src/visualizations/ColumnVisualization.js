@@ -24,7 +24,7 @@ export class ColumnVisualization extends MosaicClient {
   }
   
   /**
-   * MosaicClient prepare phase - fetch field metadata
+   * MosaicClient prepare phase - fetch field metadata and total row count
    */
   async prepare() {
     try {
@@ -36,8 +36,17 @@ export class ColumnVisualization extends MosaicClient {
           stats: ['min', 'max', 'distinct', 'nulls']
         }]
       );
-      
+
       this.fieldInfo = info[0];
+
+      // Get total row count for the table to ensure correct proportion calculations
+      const totalCountQuery = Query
+        .from(this.table)
+        .select({ total_count: count() });
+
+      const totalCountResult = await this.coordinator.query(totalCountQuery);
+      this.totalRowCount = totalCountResult.toArray()[0].total_count;
+
       return this;
     } catch (error) {
       console.error(`Failed to prepare field info for ${this.column}:`, error);

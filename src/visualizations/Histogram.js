@@ -212,8 +212,8 @@ export class Histogram extends ColumnVisualization {
       // Clear container first
       this.container.innerHTML = '';
       
-      // Calculate and store actual total count for proportion calculations
-      this.actualTotalCount = regularBins.reduce((sum, bin) => sum + bin.count, 0) + nullCount;
+      // Use the actual total row count from the base class for accurate proportion calculations
+      this.actualTotalCount = this.totalRowCount;
       
       // Initialize external stats display with total count
       if (this.statsDisplay) {
@@ -316,8 +316,7 @@ export class Histogram extends ColumnVisualization {
         const percentage = (count / this.actualTotalCount) * 100;
 
         if (isNull) {
-          const label = 'null value';
-          this.statsDisplay.textContent = `${count.toLocaleString()} ${label}${count === 1 ? '' : 's'} (${percentage.toFixed(1)}%)`;
+          this.statsDisplay.textContent = `∅: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
         } else if (bin && bin.x0 != null && bin.x1 != null) {
           // Create a temporary InteractionHandler instance for formatting
           const formatter = new InteractionHandler();
