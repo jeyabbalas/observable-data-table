@@ -10,16 +10,16 @@
 export async function detectSchema(dbOrConn, tableName) {
   // Handle both db.conn and direct conn objects
   const conn = dbOrConn.conn || dbOrConn;
-  
+
   if (!conn || !conn.query) {
     throw new Error('Invalid DuckDB connection provided');
   }
-  
+
   try {
     const result = await conn.query(`DESCRIBE ${tableName}`);
     const columns = result.toArray();
-    
-    return columns.reduce((schema, col) => {
+
+    const baseSchema = columns.reduce((schema, col) => {
       schema[col.column_name] = {
         type: col.column_type,
         nullable: col.null === 'YES',
@@ -28,6 +28,16 @@ export async function detectSchema(dbOrConn, tableName) {
       };
       return schema;
     }, {});
+
+    // Detect and mark timestamp columns in VARCHAR fields
+    try {
+      const enhancedSchema = await detectAndMarkTimestampColumns(dbOrConn, tableName, baseSchema);
+      return enhancedSchema;
+    } catch (timestampError) {
+      console.warn(`Timestamp detection failed for table '${tableName}':`, timestampError.message);
+      // Return base schema if timestamp detection fails
+      return baseSchema;
+    }
   } catch (error) {
     throw new Error(`Failed to detect schema for table '${tableName}': ${error.message}`);
   }
@@ -378,4 +388,216 @@ function formatTypeForDisplay(type) {
   
   const upperType = type.toUpperCase();
   return typeMap[upperType] || type;
+}
+
+/**
+ * Detect if a VARCHAR column contains timestamp data based on patterns
+ * @param {Object} dbOrConn - DuckDB database instance or connection
+ * @param {string} tableName - Name of the table
+ * @param {string} columnName - Name of the column
+ * @param {number} sampleSize - Number of rows to sample for pattern detection (default: 10)
+ * @returns {Object|null} Timestamp type info if detected, null otherwise
+ */
+export async function detectTimestampColumn(dbOrConn, tableName, columnName, sampleSize = 10) {
+  const conn = dbOrConn.conn || dbOrConn;
+
+  if (!conn || !conn.query) {
+    throw new Error('Invalid DuckDB connection provided');
+  }
+
+  try {
+    // Sample non-null values from the column
+    const sampleResult = await conn.query(`
+      SELECT ${columnName}
+      FROM ${tableName}
+      WHERE ${columnName} IS NOT NULL
+      LIMIT ${sampleSize}
+    `);
+    const samples = sampleResult.toArray();
+
+    if (samples.length === 0) {
+      return null;
+    }
+
+    // Check if values match timestamp patterns
+    const timestampInfo = analyzeTimestampPatterns(samples.map(row => row[columnName]));
+
+    if (timestampInfo) {
+      // For patterns with milliseconds and 'Z' suffix, skip strptime and use direct casting
+      // as DuckDB's strptime has issues with these formats
+      const testValue = samples[0][columnName];
+      const hasMillisecondsZ = /\.\d{3}Z$/.test(testValue);
+
+      if (hasMillisecondsZ) {
+        // Skip strptime for patterns known to cause issues, use direct casting
+        try {
+          const castResult = await conn.query(`
+            SELECT '${testValue}'::TIMESTAMP as cast_timestamp
+          `);
+          const cast = castResult.toArray();
+
+          if (cast.length > 0 && cast[0].cast_timestamp !== null) {
+            return {
+              detectedType: timestampInfo.type,
+              format: 'auto',
+              isTimestamp: true,
+              originalType: 'VARCHAR'
+            };
+          }
+        } catch (castError) {
+          // Direct casting failed
+        }
+      } else {
+        // Try strptime first for simpler formats
+        try {
+          const parseResult = await conn.query(`
+            SELECT strptime('${testValue}', '${timestampInfo.format}') as parsed_timestamp
+          `);
+          const parsed = parseResult.toArray();
+
+          if (parsed.length > 0 && parsed[0].parsed_timestamp !== null) {
+            return {
+              detectedType: timestampInfo.type,
+              format: timestampInfo.format,
+              isTimestamp: true,
+              originalType: 'VARCHAR'
+            };
+          }
+        } catch (parseError) {
+          // If strptime fails, try direct casting as fallback
+          try {
+            const castResult = await conn.query(`
+              SELECT '${testValue}'::TIMESTAMP as cast_timestamp
+            `);
+            const cast = castResult.toArray();
+
+            if (cast.length > 0 && cast[0].cast_timestamp !== null) {
+              return {
+                detectedType: timestampInfo.type,
+                format: 'auto',
+                isTimestamp: true,
+                originalType: 'VARCHAR'
+              };
+            }
+          } catch (castError) {
+            // Neither strptime nor casting worked
+          }
+        }
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.warn(`Failed to detect timestamp pattern for ${columnName}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Analyze string values to detect timestamp patterns
+ * @param {Array<string>} values - Array of string values to analyze
+ * @returns {Object|null} Pattern info if detected, null otherwise
+ */
+function analyzeTimestampPatterns(values) {
+  if (!values || values.length === 0) {
+    return null;
+  }
+
+  // Define patterns and their corresponding DuckDB types
+  const patterns = [
+    {
+      regex: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/,
+      type: 'TIMESTAMP',
+      format: '%Y-%m-%dT%H:%M:%S',
+      description: 'ISO 8601 timestamp'
+    },
+    {
+      regex: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      type: 'TIMESTAMP',
+      format: '%Y-%m-%dT%H:%M:%S.%gZ',
+      description: 'ISO 8601 timestamp with milliseconds and Z'
+    },
+    {
+      regex: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{3})?$/,
+      type: 'TIMESTAMP',
+      format: '%Y-%m-%d %H:%M:%S',
+      description: 'Standard timestamp format'
+    },
+    {
+      regex: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+\d{2}:\d{2}$/,
+      type: 'TIMESTAMP',
+      format: '%Y-%m-%dT%H:%M:%S%z',
+      description: 'ISO 8601 with timezone offset'
+    }
+  ];
+
+  // Check each pattern against all values
+  for (const pattern of patterns) {
+    let matchCount = 0;
+    let totalNonNull = 0;
+
+    for (const value of values) {
+      if (value !== null && value !== undefined && value !== '') {
+        totalNonNull++;
+        if (pattern.regex.test(value)) {
+          matchCount++;
+        }
+      }
+    }
+
+    // If most values match this pattern (at least 80%), consider it a match
+    if (totalNonNull > 0 && (matchCount / totalNonNull) >= 0.8) {
+      return pattern;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Detect all timestamp columns in a table and update schema metadata
+ * @param {Object} dbOrConn - DuckDB database instance or connection
+ * @param {string} tableName - Name of the table
+ * @param {Object} schema - Existing schema object to update
+ * @returns {Object} Updated schema with timestamp detection metadata
+ */
+export async function detectAndMarkTimestampColumns(dbOrConn, tableName, schema) {
+  if (!schema) {
+    return schema;
+  }
+
+  const updatedSchema = { ...schema };
+
+  // Find VARCHAR columns that might contain timestamps
+  const varcharColumns = Object.entries(schema).filter(([_, columnInfo]) => {
+    const type = typeof columnInfo.type === 'string' ?
+      columnInfo.type.toUpperCase() :
+      (columnInfo.type?.toString?.().toUpperCase() || '');
+    return type.includes('VARCHAR') || type.includes('TEXT') || type.includes('STRING');
+  });
+
+  // Check each VARCHAR column for timestamp patterns
+  for (const [columnName, columnInfo] of varcharColumns) {
+    try {
+      const timestampInfo = await detectTimestampColumn(dbOrConn, tableName, columnName);
+
+      if (timestampInfo) {
+        // Update the schema metadata to indicate this is a timestamp column
+        updatedSchema[columnName] = {
+          ...columnInfo,
+          detectedTimestampType: timestampInfo.detectedType,
+          timestampFormat: timestampInfo.format,
+          isDetectedTimestamp: true,
+          originalType: columnInfo.type,
+          // Update the visualization type
+          vizType: 'temporal'
+        };
+
+      }
+    } catch (error) {
+      console.warn(`Failed to check timestamp pattern for column ${columnName}:`, error.message);
+    }
+  }
+
+  return updatedSchema;
 }

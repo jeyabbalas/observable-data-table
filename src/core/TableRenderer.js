@@ -389,7 +389,12 @@ export class TableRenderer extends MosaicClient {
   getFieldType(fieldName) {
     const fieldSchema = this.schema[fieldName];
     if (!fieldSchema) return 'unknown';
-    
+
+    // Handle detected timestamp columns (show the detected type, not VARCHAR)
+    if (fieldSchema.isDetectedTimestamp && fieldSchema.detectedTimestampType) {
+      return fieldSchema.detectedTimestampType.toLowerCase();
+    }
+
     // Handle Arrow schema format (has typeId)
     if (fieldSchema.type && fieldSchema.type.typeId !== undefined) {
       switch (fieldSchema.type.typeId) {
@@ -485,7 +490,12 @@ export class TableRenderer extends MosaicClient {
       name: fieldName,
       type: mockTypeObject,
       // Include original DuckDB type for formatting decisions
-      duckdbType: fieldSchema.type
+      duckdbType: fieldSchema.type,
+      // Include detected timestamp metadata if present
+      isDetectedTimestamp: fieldSchema.isDetectedTimestamp,
+      detectedTimestampType: fieldSchema.detectedTimestampType,
+      timestampFormat: fieldSchema.timestampFormat,
+      originalType: fieldSchema.originalType
     };
     
     // Check field type and create appropriate visualization
@@ -587,14 +597,19 @@ export class TableRenderer extends MosaicClient {
    */
   isTemporalField(fieldSchema) {
     if (!fieldSchema || !fieldSchema.type) return false;
-    
+
+    // Check for detected timestamp columns (VARCHAR columns containing timestamp data)
+    if (fieldSchema.isDetectedTimestamp) {
+      return true;
+    }
+
     // Handle Arrow types
     if (fieldSchema.type.typeId !== undefined) {
       const typeId = fieldSchema.type.typeId;
-      return typeId === Type.Date || 
+      return typeId === Type.Date ||
              typeId === Type.Timestamp;
     }
-    
+
     // Handle DuckDB string types from detectSchema
     if (typeof fieldSchema.type === 'string') {
       const duckdbType = fieldSchema.type.toUpperCase();
@@ -605,7 +620,7 @@ export class TableRenderer extends MosaicClient {
         duckdbType.includes('TIME')
       );
     }
-    
+
     return false;
   }
   

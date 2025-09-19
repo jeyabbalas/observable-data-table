@@ -76,6 +76,11 @@ export class DateHistogram extends ColumnVisualization {
   detectTemporalType() {
     if (!this.field) return 'DATE'; // Default fallback
 
+    // Check for detected timestamp columns (VARCHAR with timestamp patterns)
+    if (this.field.isDetectedTimestamp || this.field.detectedTimestampType) {
+      return this.field.detectedTimestampType || 'TIMESTAMP';
+    }
+
     // Check DuckDB type from mock field (preferred)
     if (this.field.duckdbType && typeof this.field.duckdbType === 'string') {
       const typeStr = this.field.duckdbType.toUpperCase();
@@ -378,8 +383,15 @@ export class DateHistogram extends ColumnVisualization {
       return Query.unionAll(validQuery, nullQuery);
     }
 
-    // Extract epoch seconds from the column
-    const columnEpoch = sql`EXTRACT(epoch FROM ${this.column}::TIMESTAMP)`;
+    // Extract epoch seconds from the column - handle detected timestamp columns
+    let columnEpoch;
+    if (this.field && this.field.isDetectedTimestamp) {
+      // For detected timestamp columns (VARCHAR with timestamp patterns), try direct casting first
+      columnEpoch = sql`EXTRACT(epoch FROM ${this.column}::TIMESTAMP)`;
+    } else {
+      // For native temporal columns, use standard casting
+      columnEpoch = sql`EXTRACT(epoch FROM ${this.column}::TIMESTAMP)`;
+    }
 
     // Create binned query using JavaScript-calculated values
     const binQuery = Query
