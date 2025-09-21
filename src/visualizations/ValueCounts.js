@@ -26,6 +26,9 @@ export class ValueCounts extends ColumnVisualization {
     // Store actual total count for correct proportion calculations
     this.actualTotalCount = 0;
 
+    // Store total number of categories
+    this.totalCategoryCount = 0;
+
     // Configuration
     this.maxCategories = 10; // Show up to 10 categories, aggregate the rest
     this.minCategoryCount = 2; // Categories with count >= 2 are shown individually
@@ -122,9 +125,12 @@ export class ValueCounts extends ColumnVisualization {
       // Use the actual total row count from the base class for accurate proportion calculations
       this.actualTotalCount = this.totalRowCount;
 
-      // Initialize external stats display with total count
+      // Calculate total number of categories (including nulls if present)
+      this.totalCategoryCount = regularCategories.length + (nullCount > 0 ? 1 : 0);
+
+      // Initialize external stats display with total count and category count
       if (this.statsDisplay) {
-        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows`;
+        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows; ${this.totalCategoryCount} categories`;
       }
 
       if (this.interactive) {
@@ -256,7 +262,7 @@ export class ValueCounts extends ColumnVisualization {
       const barWidth = proportion * plotWidth;
 
       // Determine color
-      let barColor = cat.isUnique ? '#d1d5db' : '#3b82f6'; // Light gray for unique, blue for regular
+      let barColor = cat.isUnique ? '#d1d5db' : '#2563eb'; // Light gray for unique, blue for regular
 
       // Create bar
       const barGroup = g.append('g')
@@ -442,8 +448,8 @@ export class ValueCounts extends ColumnVisualization {
           this.statsDisplay.textContent = `${value}: ${count.toLocaleString()} rows (${percentage.toFixed(1)}%)`;
         }
       } else {
-        // Reset to total count
-        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows`;
+        // Reset to total count and category count
+        this.statsDisplay.textContent = `${this.actualTotalCount.toLocaleString()} rows; ${this.totalCategoryCount} categories`;
       }
     }
   }
