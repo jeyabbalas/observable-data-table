@@ -718,6 +718,12 @@ body {
   height: auto;
 }
 
+.value-counts-visualization svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 /* Visualization text labels */
 .column-viz svg text {
   font-family: var(--font-sans);
@@ -748,6 +754,36 @@ body {
 /* Interactive Histogram Styles - Integrated Display */
 .histogram-visualization {
   height: auto;
+}
+
+/* Value Counts Visualization Styles */
+.value-counts-visualization {
+  height: auto;
+}
+
+.value-counts-visualization svg .category-bar rect {
+  shape-rendering: crispEdges;
+  transition: opacity 0.15s ease;
+}
+
+.value-counts-visualization svg .category-bar:hover rect {
+  opacity: 0.8;
+}
+
+.value-counts-visualization svg .null-bar rect {
+  shape-rendering: crispEdges;
+  transition: opacity 0.15s ease;
+}
+
+.value-counts-visualization svg .null-bar:hover rect {
+  opacity: 0.8;
+}
+
+.value-counts-visualization svg text {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  fill: white;
 }
 
 .histogram-visualization svg .stats-display text {

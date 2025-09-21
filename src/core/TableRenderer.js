@@ -4,6 +4,7 @@ import { signal } from '@preact/signals-core';
 import { Type } from '@uwdata/flechette';
 import { Histogram } from '../visualizations/Histogram.js';
 import { DateHistogram } from '../visualizations/DateHistogram.js';
+import { ValueCounts } from '../visualizations/ValueCounts.js';
 
 export class TableRenderer extends MosaicClient {
   constructor(options) {
@@ -552,8 +553,31 @@ export class TableRenderer extends MosaicClient {
         this.createPlaceholderViz(container, 'Error');
       }
     } else {
-      // For non-numeric, non-temporal fields, show placeholder for now
-      this.createPlaceholderViz(container, 'Text');
+      // For categorical fields (string, boolean), create value counts visualization
+      try {
+        const valueCounts = new ValueCounts({
+          table: this.table,
+          column: fieldName,
+          field: mockField,
+          filterBy: this.filterBy,
+          statsDisplay: statsDisplay
+        });
+
+        // Connect to coordinator
+        if (this.coordinator) {
+          this.coordinator.connect(valueCounts);
+        }
+
+        // Add to container
+        container.appendChild(valueCounts.node());
+
+        // Store reference for cleanup
+        this.visualizations.set(fieldName, valueCounts);
+
+      } catch (error) {
+        console.error(`Failed to create value counts for ${fieldName}:`, error);
+        this.createPlaceholderViz(container, 'Text');
+      }
     }
   }
   
